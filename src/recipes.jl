@@ -36,6 +36,8 @@ underlying graph and therefore changing the number of Edges/Nodes.
   Defaults to `scatter_theme.marker` in absence of `ilabels`.
 - `node_strokewidth=automatic`
   Defaults to `scatter_theme.strokewidth` in absence of `ilabels`.
+- `node_outset=0.0`:
+  Creates a small space around nodes.
 - `node_attr=(;)`: List of kw arguments which gets passed to the `scatter` command
 - `edge_color=lineseg_theme.color`: Color for edges.
 - `edge_width=lineseg_theme.linewidth`: Pass a vector with 2 width per edge to
@@ -156,6 +158,7 @@ Waypoints along edges:
         node_size = automatic,
         node_marker = automatic,
         node_strokewidth = automatic,
+        node_outset=0.0,
         node_attr = (;),
         # edge attributes (LineSegements)
         edge_color = lineseg_theme.color,
@@ -306,13 +309,13 @@ function Makie.plot!(gp::GraphPlot)
     # compute initial edge paths; will be adjusted later if arrow_shift = :end
     # create array of paths triggered by node_pos changes
     # in case of a graph change the node_position will change anyway
-    map!(gp.attributes, [:node_pos, :selfedge_size, :selfedge_direction, :selfedge_width, :curve_distance_usage, :curve_distance, :graph], :init_edge_paths) do pos, s, d, w, cdu, cd, g
-        find_edge_paths(g, gp.attributes, pos)
+    map!(gp.attributes, [:node_pos, :selfedge_size, :selfedge_direction, :selfedge_width, :curve_distance_usage, :curve_distance, :graph, :node_outset], :init_edge_paths) do pos, s, d, w, cdu, cd, g, outset
+        find_edge_paths(g, gp.attributes, pos, outset)
     end
 
     # plot arrow heads
-    map!(gp.attributes, [:init_edge_paths, :to_px, :arrow_shift, :node_marker_m, :node_size_m, :arrow_size, :graph], :arrow_shift_m) do paths, tpx, shift, nmarker, nsize, asize, g
-        update_arrow_shift(g, gp, paths, tpx, nmarker, nsize, shift)
+    map!(gp.attributes, [:init_edge_paths, :to_px, :arrow_shift, :node_marker_m, :node_size_m, :arrow_size, :graph, :node_outset], :arrow_shift_m) do paths, tpx, shift, nmarker, nsize, asize, g, outset
+        update_arrow_shift(g, gp, paths, tpx, nmarker, nsize, shift, outset)
     end
     map!(gp.attributes, [:init_edge_paths, :arrow_shift_m, :node_pos], :arrow_pos) do paths, shift_m, np
         if !isempty(paths)
@@ -572,7 +575,7 @@ end
 Returns an `AbstractPath` for each edge in the graph. Returns a vector of
 paths. If `attr.force_straight_edges` is `true`, the paths will be just plain lines
 """
-function find_edge_paths(g, attr, pos::AbstractVector{PT}) where {PT}
+function find_edge_paths(g, attr, pos::AbstractVector{PT}, outset) where {PT}
     # for straight_lines: return vector of Line rather than vector of AbstractPath
     if attr.force_straight_edges[]
         return map(edges(g)) do e
@@ -584,6 +587,7 @@ function find_edge_paths(g, attr, pos::AbstractVector{PT}) where {PT}
     paths = Vector{AbstractPath{PT}}(undef, ne(g))
     for (i, e) in enumerate(edges(g))
         p1, p2 = pos[src(e)], pos[dst(e)]
+
 
         tangents = getattr(attr.tangents, i)
         tfactor = getattr(attr.tfactor, i)
@@ -606,12 +610,12 @@ function find_edge_paths(g, attr, pos::AbstractVector{PT}) where {PT}
             end
         end
 
-        if !isnothing(waypoints) && !isempty(waypoints) #there are waypoints
+        path = if !isnothing(waypoints) && !isempty(waypoints) #there are waypoints
             radius = getattr(attr.waypoint_radius, i, nothing)
             if radius === nothing || radius === :spline
-                paths[i] = Path(p1, waypoints..., p2; tangents, tfactor)
+                Path(p1, waypoints..., p2; tangents, tfactor)
             elseif radius isa Real
-                paths[i] = Path(radius, p1, waypoints..., p2)
+                Path(radius, p1, waypoints..., p2)
             else
                 throw(ArgumentError("Invalid radius $radius for edge $i!"))
             end
@@ -621,15 +625,36 @@ function find_edge_paths(g, attr, pos::AbstractVector{PT}) where {PT}
             width = getattr(attr.selfedge_width, i)
             paths[i] = selfedge_path(g, pos, src(e), size, direction, width)
         elseif !isnothing(tangents)
-            paths[i] = Path(p1, p2; tangents, tfactor)
+            Path(p1, p2; tangents, tfactor)
         elseif PT<:Point2 && !iszero(curve_distance)
-            paths[i] = curved_path(p1, p2, curve_distance)
+            curved_path(p1, p2, curve_distance)
         else # straight line
-            paths[i] = Path(p1, p2)
+            Path(p1, p2)
         end
+
+        path = if getattr(outset, src(e)) > 0.0 || getattr(outset, dst(e)) > 0.0
+            p1_shifted = shift_point(attr, src(e), getattr(outset, src(e)), path, p1, -1)
+            p2_shifted = shift_point(attr, dst(e), getattr(outset, dst(e)), path, p2, 1)
+            Path(p1_shifted, p2_shifted)
+        else
+            path
+        end
+
+        paths[i] = path
     end
 
+
     return paths
+end
+
+function shift_point(attr, id, outset, path, p1, scale)
+    node_marker = getattr(attr.node_marker_m[], id)
+    node_size = getattr(attr.node_size_m[], id)
+    d = distance_between_markers(node_marker, scale * node_size, node_marker, scale * node_size)
+    @show d
+    # d = 4 * scale
+    # @show d
+    return Point2f(point_near_dst(path, p1, 0.1d, attr.to_px[]))
 end
 
 """
@@ -830,7 +855,7 @@ end
 Checks `arrow_shift` attr so that `arrow_shift = :end` gets transformed so that the arrowhead for that edge
 lands on the surface of the destination node.
 """
-function update_arrow_shift(g, gp, edge_paths::Vector{<:AbstractPath{PT}}, to_px, node_markers, node_sizes, shift) where {PT}
+function update_arrow_shift(g, gp, edge_paths::Vector{<:AbstractPath{PT}}, to_px, node_markers, node_sizes, shift, outset) where {PT}
     arrow_shift = Vector{Float32}(undef, ne(g))
 
     for (i,e) in enumerate(edges(g))
@@ -840,9 +865,10 @@ function update_arrow_shift(g, gp, edge_paths::Vector{<:AbstractPath{PT}}, to_px
             p0 = getattr(gp.node_pos, j)
             node_marker = getattr(node_markers, j)
             node_size = getattr(node_sizes, j)
+            node_outset = getattr(outset, j)
             arrow_marker = getattr(gp.arrow_marker, i)
             arrow_size = getattr(gp.arrow_size, i)
-            d = distance_between_markers(node_marker, node_size, arrow_marker, arrow_size)
+            d = distance_between_markers(node_marker, node_size+node_outset, arrow_marker, arrow_size)
             p1 = point_near_dst(edge_paths[i], p0, d, to_px)
             t = inverse_interpolate(edge_paths[i], p1)
             if isnan(t)
