@@ -4,213 +4,210 @@ export GraphPlot, graphplot, graphplot!, Arrow
 
 const Arrow = Makie.Polygon(Point2f.([(-0.5,-0.5),(0.5,0),(-0.5,0.5),(-0.25,0)]))
 
-"""
-    graphplot(graph::AbstractGraph)
-    graphplot!(ax, graph::AbstractGraph)
+function format_attributes(d, names)
+    io = IOBuffer()
+    for name in names
+        default = d[name].default_expr
+        print(io, "- **`", name, "`** = ", " `", default, "`  — ")
+        println(io, something(d[name].docstring, "*No docs available.*"))
+    end
+    return String(take!(io))
+end
 
-Creates a plot of the network `graph`. Consists of multiple steps:
-- Layout the nodes: see `layout` attribute. The node position is accessible from outside
-  the plot object `p` as an observable using `p[:node_pos]`.
-- plot edges as `edgeplot`-plot
-- if `arrow_show` plot arrowheads as `scatter`-plot
-- plot nodes as `scatter`-plot
-- if `nlabels!=nothing` plot node labels as `text`-plot
-- if `elabels!=nothing` plot edge labels as `text`-plot
+function graphplot_docstring(PlotType)
+    d = Makie.documented_attributes(PlotType).d
+    return """
+            graphplot(graph::AbstractGraph)
+            graphplot!(ax, graph::AbstractGraph)
 
-The main attributes for the subplots are exposed as attributes for `graphplot`.
-Additional attributes for the `scatter`, `edgeplot` and `text` plots can be provided
-as a named tuples to `node_attr`, `edge_attr`, `nlabels_attr` and `elabels_attr`.
+        Creates a plot of the network `graph`. Consists of multiple steps:
+        - Layout the nodes: see `layout` attribute. The node position is accessible from outside
+            the plot object `p` as an observable using `p[:node_pos]`.
+        - plot edges as `edgeplot`-plot
+        - if `arrow_show` plot arrowheads as `scatter`-plot
+        - plot nodes as `scatter`-plot
+        - if `nlabels!=nothing` plot node labels as `text`-plot
+        - if `elabels!=nothing` plot edge labels as `text`-plot
 
-Most of the arguments can be either given as a vector of length of the
-edges/nodes or as a single value. One might run into errors when changing the
-underlying graph and therefore changing the number of Edges/Nodes.
+        The main attributes for the subplots are exposed as attributes for `graphplot`.
+        Additional attributes for the `scatter`, `edgeplot` and `text` plots can be provided
+        as a named tuples to `node_attr`, `edge_attr`, `nlabels_attr` and `elabels_attr`.
 
-## Attributes
-### Main attributes
-- `layout=Spring()`: function `AbstractGraph->Vector{Point}` or `Vector{Point}` that determines the base layout.  Can also be any network layout from [NetworkLayout.jl](https://github.com/JuliaGraphs/NetworkLayout.jl), like `Spring`, `Stress`, `Spectral`, etc.
-- `node_color=automatic`:
-  Defaults to `scatter_theme.color` in absence of `ilabels`.
-- `node_size=automatic`:
-  Defaults to `scatter_theme.markersize` in absence of `ilabels`. Otherwise choses node size based on `ilabels` size.
-- `node_marker=automatic`:
-  Defaults to `scatter_theme.marker` in absence of `ilabels`.
-- `node_strokewidth=automatic`:
-  Defaults to `scatter_theme.strokewidth` in absence of `ilabels`.
-- `node_outset=nothing`:
-  Creates a small gap between edges and nodes. `nothing`, skips the calcuation. 
-- `node_attr=(;)`: List of kw arguments which gets passed to the `scatter` command
-- `edge_color=lineseg_theme.color`: Color for edges.
-- `edge_width=lineseg_theme.linewidth`: Pass a vector with 2 width per edge to
-  get pointy edges.
-- `edge_linestyle=:solid`: Linestyle of edges. Can also be vector or dict for per-edge styling.
-  When using different linestyles for different edges, GraphMakie
-  creates separate line plots for each edge rather than combining them into one plot, which may reduce
-  performance for graphs with many edges. For optimal performance with large graphs, use homogeneous
-  linestyles.
-- `edge_outset=(nothing, nothing)`:
-  Creates a small gap between nodes and the endpoints of the edges. Control the start and end gap separately with tuple `(startgap, endgap)`.
-  This parameter is additive to `node_outset`.
-- `edge_attr=(;)`: List of kw arguments which gets passed to the underlying `lines` command used for plotting edges.
-- `arrow_show=Makie.automatic`: `Bool`, indicate edge directions with arrowheads?
-  Defaults to `Graphs.is_directed(graph)`.
-- `arrow_marker='➤'`
-- `arrow_size=scatter_theme.markersize`: Size of arrowheads.
-- `arrow_shift=0.5`: Shift arrow position from source (0) to dest (1) node.
-  If `arrow_shift=:end`, the arrowhead will be placed on the surface of the destination node
-  (assuming the destination node is circular).
-- `arrow_attr=(;)`: List of kw arguments which gets passed to the `scatter` command
+        Most of the arguments can be either given as a vector of length of the
+        edges/nodes or as a single value. One might run into errors when changing the
+        underlying graph and therefore changing the number of Edges/Nodes.
 
-### Node labels
-The position of each label is determined by the node position plus an offset in
-data space.
+        ## Plot type
+        The plot type alias for the `graphplot` function is `GraphPlot`.
 
-- `nlabels=nothing`: `Vector{String}` with label for each node
-- `nlabels_align=(:left, :bottom)`: Anchor of text field.
-- `nlabels_distance=0.0`: Pixel distance from node in direction of align.
-- `nlabels_color=labels_theme.color`
-- `nlabels_offset=nothing`: `Point` or `Vector{Point}` (in data space)
-- `nlabels_fontsize=labels_theme.fontsize`
-- `nlabels_attr=(;)`: List of kw arguments which gets passed to the `text` command
+        ## Attributes
+        ### Main attributes
+        $(format_attributes(d,
+            [:layout, :node_color, :node_size, :node_marker, :node_strokewidth, :node_outset, :node_attr,
+            :edge_color, :edge_width, :edge_linestyle, :edge_outset, :edge_attr, :arrow_show, :arrow_marker,
+            :arrow_size, :arrow_shift, :arrow_attr]
+        ))
 
-### Inner node labels
-Put labels inside the marker. If labels are provided, change default attributes to
-`node_marker=Circle`, `node_strokewidth=1` and `node_color=:gray80`.
-The `node_size` will match size of the `ilabels`.
+        ### Node labels
+        The position of each label is determined by the node position plus an offset in data space.
+        $(format_attributes(d,
+            [:nlabels, :nlabels_align, :nlabels_distance, :nlabels_color, :nlabels_offset, :nlabels_fontsize,
+            :nlabels_attr]
+        ))
 
-- `ilabels=nothing`: `Vector` with label for each node
-- `ilabels_color=labels_theme.color`
-- `ilabels_fontsize=labels_theme.fontsize`
-- `ilabels_attr=(;)`: List of kw arguments which gets passed to the `text` command
+        ### Inner node labels
+        Put labels inside the marker. If labels are provided, change default attributes to
+        `node_marker=Circle`, `node_strokewidth=1` and `node_color=:gray80`.
+        The `node_size` will match size of the `ilabels`.
+        $(format_attributes(d,
+            [:ilabels, :ilabels_color, :ilabels_fontsize, :ilabels_attr]
+        ))
 
-### Edge labels
-The base position of each label is determined by `src + shift*(dst-src)`. The
-additional `distance` parameter is given in pixels and shifts the text away from
-the edge.
+        ### Edge labels
+        The base position of each label is determined by `src + shift*(dst-src)`. The
+        additional `distance` parameter is given in pixels and shifts the text away from
+        the edge.
+        $(format_attributes(d,
+            [:elabels, :elabels_align, :elabels_side, :elabels_distance, :elabels_shift, :elabels_rotation,
+            :elabels_offset, :elabels_color, :elabels_fontsize, :elabels_attr]
+        ))
+            
+        Self edges / loops:
+        $(format_attributes(d,
+            [:selfedge_size, :selfedge_direction, :selfedge_width]
+        ))
+        - Note: If valid waypoints are provided for selfloops, the selfedge attributes above will be ignored.
 
-- `elabels=nothing`: `Vector{String}` with label for each edge
-- `elabels_align=(:center, :center)`: Anchor of text field.
-- `elabels_side = :left`: Side of the edge to put the edge label text
-- `elabels_distance=Makie.automatic`: Pixel distance of anchor to edge. The direction is decided based on `elabels_side`
-- `elabels_shift=0.5`: Position between src and dst of edge.
-- `elabels_rotation=Makie.automatic`: Angle of text per label. If `nothing` this will be
-  determined by the edge angle. If `automatic` it will also point upwards making it easy to read.
-- `elabels_offset=nothing`: Additional offset in data space
-- `elabels_color=labels_theme.color`
-- `elabels_fontsize=labels_theme.fontsize`
-- `elabels_attr=(;)`: List of kw arguments which gets passed to the `text` command
+        High level interface for curvy edges:
+        $(format_attributes(d,
+            [:force_straight_edges, :curve_distance, :curve_distance_usage]
+        ))
 
-Self edges / loops:
+        Tangents interface for curvy edges:
+        $(format_attributes(d,
+            [:tangents, :tfactor]
+        ))
+        - Note: Tangents are ignored on selfloops if no waypoints are provided.
 
-- `selfedge_size=Makie.automatic()`: Size of selfloop (dict/vector possible).
-- `selfedge_direction=Makie.automatic()`: Direction of center of the selfloop as `Point2` (dict/vector possible).
-- `selfedge_width=Makie.automatic()`: Opening of selfloop in rad (dict/vector possible).
-- Note: If valid waypoints are provided for selfloops, the selfedge attributes above will be ignored.
+        Waypoints along edges:
+        $(format_attributes(d,
+            [:waypoints, :waypoint_radius]
+        ))
+        """
+end
 
-High level interface for curvy edges:
-- `force_straight_edges=false`: If `true`, ignore all curvy edge attributes and draw all edges as straight lines.
+@recipe GraphPlot (graph,) begin
+    "function `AbstractGraph->Vector{Point}` or `Vector{Point}` that determines the base layout.  Can also be any network layout from [NetworkLayout.jl](https://github.com/JuliaGraphs/NetworkLayout.jl), like `Spring`, `Stress`, `Spectral`, etc."
+    layout=Spring()     # node attributes (Scatter)
+    "Defaults to `@inherit markercolor` in absence of `ilabels`."
+    node_color=automatic
+    "Defaults to `@inherit markersize` in absence of `ilabels`. Otherwise choses node size based on `ilabels` size."
+    node_size=automatic
+    "Defaults to `@inherit marker` in absence of `ilabels`."
+    node_marker=automatic
+    "Defaults to `@inherit strokewidth` in absence of `ilabels`."
+    node_strokewidth=automatic
+    "Creates a small gap between edges and nodes. `nothing` skips the calcuation while `0.0` adjusts the endpoints to the edges of the marker, which can be useful with transparent nodes."
+    node_outset=nothing
+    "List of kw arguments which gets passed to the `scatter` command."
+    node_attr=(;)
+    # edge attributes (LineSegements)
+    "Color for edges."
+    edge_color = @inherit linecolor
+    "Pass a vector with 2 width per edge to get pointy edges."  # TODO: figure out what this means
+    edge_width = @inherit linewidth
+    "Linestyle of edges. Can also be vector or dict for per-edge styling. When using different linestyles for different edges, GraphMakie creates separate line plots for each edge rather than combining them into one plot, which may reduce performance for graphs with many edges. For optimal performance with large graphs, use homogeneous linestyles."
+    edge_linestyle=:solid
+    "Creates a small gap between nodes and the endpoints of the edges. Control the start and end gap separately with tuple `(startgap, endgap)`. This parameter is additive to `node_outset`."
+    edge_outset=(nothing, nothing)
+    "List of kw arguments which gets passed to the underlying `lines` command used for plotting edges."
+    edge_attr=(;)
+    # arrow attributes (Scatter)
+    "`Bool`, indicate edge directions with arrowheads? Defaults to `Graphs.is_directed(graph)`."
+    arrow_show=automatic
+    "Marker used as arrowhead."
+    arrow_marker=('➤')
+    "Size of arrowheads."
+    arrow_size = @inherit markersize
+    "Shift arrow position from source (0) to dest (1) node. If `arrow_shift=:end`, the arrowhead will be placed on the surface of the destination node (assuming the destination node is circular)."  # TODO: remove the circular stipulation once we can do non-circular markers
+    arrow_shift=0.5
+    "List of kw arguments which gets passed to the `scatter` command."
+    arrow_attr=(;)
+    # node label attributes (Text)
+    "`Vector{String}` with label for each node."
+    nlabels=nothing
+    "Anchor of text field."
+    nlabels_align=(:left, :bottom)
+    "Pixel distance from node in direction of align."
+    nlabels_distance=0.0
+    "Text color of node labels."
+    nlabels_color=@inherit textcolor
+    "`Point` or `Vector{Point}` (in data space)."
+    nlabels_offset=nothing
+    "Fontsize of node labels."
+    nlabels_fontsize=@inherit fontsize
+    "List of kw arguments which gets passed to the `text` command."
+    nlabels_attr=(;)
+    # inner node labels
+    "`Vector` with label for each node."
+    ilabels=nothing
+    "Text color of inner node labels."
+    ilabels_color=@inherit textcolor
+    "Fontsize of inner node labels."
+    ilabels_fontsize=@inherit fontsize
+    "List of kw arguments which gets passed to the `text` command."
+    ilabels_attr=(;)
+    # edge label attributes (Text)
+    "`Vector{String}` with label for each edge."
+    elabels=nothing
+    "Anchor of text field."
+    elabels_align=(:center, :center)
+    "Side of the edge to put the edge label text."
+    elabels_side=:left
+    "Pixel distance of anchor to edge. The direction is decided based on `elabels_side`."
+    elabels_distance=automatic
+    "Position between src and dst of edge."
+    elabels_shift=0.5
+    "Angle of text per label. If `nothing` this will be determined by the edge angle. If `automatic` it will also point upwards making it easy to read."
+    elabels_rotation=automatic
+    "Additional offset in data space."
+    elabels_offset=nothing
+    "Text color of edge labels."
+    elabels_color=@inherit textcolor
+    "Fontsize of edge labels."
+    elabels_fontsize=@inherit fontsize
+    "List of kw arguments which gets passed to the `text` command."
+    elabels_attr=(;)
+    # self edge attributes
+    "Size of selfloop (dict/vector possible)."
+    selfedge_size=automatic
+    "Direction of center of the selfloop as `Point2` (dict/vector possible)."
+    selfedge_direction=automatic
+    "Opening of selfloop in rad (dict/vector possible)."
+    selfedge_width=automatic
+    "If `true`, ignore all curvy edge attributes and draw all edges as straight lines."
+    force_straight_edges=false
+    "Specify a distance of the (now curved) line to the straight line *in data space*. Can be single value, array or dict. User provided `tangents` or `waypoints` will overrule this property."
+    curve_distance=0.1
+    "If `Makie.automatic()`, only plot double edges in a curvy way. Other options are `true` and `false`."
+    curve_distance_usage=automatic
+    "Specify a pair of tangent vectors per edge (for src and dst). If `nothing` (or edge idx not in dict) draw a straight line."
+    tangents=nothing
+    "Factor is used to calculate the bezier waypoints from the (normalized) tangents. Higher factor means bigger radius. Can be tuple per edge to specify different factor for src and dst."
+    tfactor=0.6
+    "Specify waypoints for edges. This parameter should be given as a vector or dict. Waypoints will be crossed using natural cubic splines. The waypoints may or may not include the src/dst positions."
+    waypoints=nothing
+    "If the attribute `waypoint_radius` is `nothing` or `:spline` the waypoints will be crossed using natural cubic spline interpolation. If number (dict/vector possible), the waypoints won't be reached, instead they will be connected with straight lines which bend in the given radius around the waypoints."
+    waypoint_radius=nothing
+end
 
-- `curve_distance=0.1`:
-
-    Specify a distance of the (now curved) line to the straight line *in data
-    space*. Can be single value, array or dict. User provided `tangents` or
-    `waypoints` will overrule this property.
-
-- `curve_distance_usage=Makie.automatic()`:
-
-    If `Makie.automatic()`, only plot double edges in a curvy way. Other options
-    are `true` and `false`.
-
-Tangents interface for curvy edges:
-
-- `tangents=nothing`:
-
-    Specify a pair of tangent vectors per edge (for src and dst). If `nothing`
-    (or edge idx not in dict) draw a straight line.
-
-- `tfactor=0.6`:
-
-    Factor is used to calculate the bezier waypoints from the (normalized) tangents.
-    Higher factor means bigger radius. Can be tuple per edge to specify different
-    factor for src and dst.
-
-- Note: Tangents are ignored on selfloops if no waypoints are provided.
-
-Waypoints along edges:
-- `waypoints=nothing`
-
-    Specify waypoints for edges. This parameter should be given as a vector or
-    dict. Waypoints will be crossed using natural cubic splines. The waypoints may
-    or may not include the src/dst positions.
-
-- `waypoint_radius=nothing`
-
-    If the attribute `waypoint_radius` is `nothing` or `:spline` the waypoints will
-    be crossed using natural cubic spline interpolation. If number (dict/vector
-    possible), the waypoints won't be reached, instead they will be connected with
-    straight lines which bend in the given radius around the waypoints.
-"""
-@recipe(GraphPlot, graph) do scene
-    # TODO: figure out this whole theme business
-    scatter_theme = default_theme(scene, Scatter)
-    lineseg_theme = default_theme(scene, LineSegments)
-    labels_theme = default_theme(scene, Makie.Text)
-    Attributes(
-        layout = Spring(),
-        # node attributes (Scatter)
-        node_color = automatic,
-        node_size = automatic,
-        node_marker = automatic,
-        node_strokewidth = automatic,
-        node_outset = nothing,
-        node_attr = (;),
-        # edge attributes (LineSegements)
-        edge_color = lineseg_theme.color,
-        edge_width = lineseg_theme.linewidth,
-        edge_linestyle = :solid,
-        edge_outset = (nothing, nothing),
-        edge_attr = (;),
-        # arrow attributes (Scatter)
-        arrow_show = automatic,
-        arrow_marker = '➤',
-        arrow_size = scatter_theme.markersize,
-        arrow_shift = 0.5,
-        arrow_attr = (;),
-        # node label attributes (Text)
-        nlabels = nothing,
-        nlabels_align = (:left, :bottom),
-        nlabels_distance = 0.0,
-        nlabels_color = labels_theme.color,
-        nlabels_offset = nothing,
-        nlabels_fontsize = labels_theme.fontsize,
-        nlabels_attr = (;),
-        # inner node labels
-        ilabels = nothing,
-        ilabels_color = labels_theme.color,
-        ilabels_fontsize = labels_theme.fontsize,
-        ilabels_attr = (;),
-        # edge label attributes (Text)
-        elabels = nothing,
-        elabels_align = (:center, :center),
-        elabels_side = :left,
-        elabels_distance = automatic,
-        elabels_shift = 0.5,
-        elabels_rotation = automatic,
-        elabels_offset = nothing,
-        elabels_color = labels_theme.color,
-        elabels_fontsize = labels_theme.fontsize,
-        elabels_attr = (;),
-        # self edge attributes
-        force_straight_edges = false,
-        selfedge_size = automatic,
-        selfedge_direction = automatic,
-        selfedge_width = automatic,
-        curve_distance = 0.1,
-        curve_distance_usage = automatic,
-        tangents=nothing,
-        tfactor=0.6,
-        waypoints=nothing,
-        waypoint_radius=nothing,
-    )
+# replace the Makie generated docstring for `graphplot` with our custom one
+let
+    # suppress warning about overwriting docstring
+    # (https://discourse.julialang.org/t/is-there-any-way-to-remove-the-docstrings-for-all-methods-of-a-function/1497/12)
+    docs = Docs.meta(@__MODULE__)
+    docs[Docs.Binding(@__MODULE__, :graphplot)] = Docs.MultiDoc()
+    @doc graphplot_docstring(GraphPlot) graphplot
 end
 
 function Makie.plot!(gp::GraphPlot)
