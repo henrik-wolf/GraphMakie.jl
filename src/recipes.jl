@@ -17,8 +17,8 @@ end
 function graphplot_docstring(PlotType)
     d = Makie.documented_attributes(PlotType).d
     return """
-            graphplot(graph::AbstractGraph)
-            graphplot!(ax, graph::AbstractGraph)
+            graphplot(graph::AbstractGraph; kwargs...)
+            graphplot!(ax, graph::AbstractGraph; kwargs...)
 
         Creates a plot of the network `graph`. Consists of multiple steps:
         - Layout the nodes: see `layout` attribute. The node position is accessible from outside
