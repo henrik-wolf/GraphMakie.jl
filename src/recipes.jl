@@ -251,63 +251,133 @@ function Makie.plot!(gp::GraphPlot)
         end
     end
 
-    # plot inside labels
-    # TODO: this makes reactive swapping of ilabels impossible
-    if gp[:ilabels][] !== nothing
-        map!(gp.attributes, :ilabels, :ilabels_text) do ilabels
-            string.(ilabels)
-        end
+    # MARK: Set up data for ilabels plot
+    map!(PerNodeAttribute, gp.attributes, :ilabels, :ilabels_m)
+    map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), :ilabels_color, :ilabels_color_m)
+    map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), :ilabels_fontsize, :ilabels_fontsize_m)
 
-        ilabels_plot = text!(gp, gp[:node_pos];
-            text=gp[:ilabels_text],
-            align=(:center, :center),
-            color=gp.ilabels_color,
-            fontsize=gp.ilabels_fontsize,
-            # TODO: this breaks reactivity for ilabel attributes
-            gp.ilabels_attr[]...)
-        add_constant!(gp.attributes, :ilabels_plot, ilabels_plot) #make plotobj accessible
+    map!(!is_scalar_nothing, gp.attributes, :ilabels_m, :ilabels_plot_visible)
 
-        map!(gp.attributes, [:ilabels_plot, :ilabels_text, :ilabels_fontsize, :node_size], :node_size_m) do ilp, txt, ilabels_fontsize, node_size
-            bbs = Makie.fast_string_boundingboxes(ilp)
-            map(enumerate(bbs)) do (i, bb)
-                _ns = getattr(node_size, i)
+    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_m, :graph], :ilabel_node_ids) do visible, ilabels, graph
+       visible ? nodes_with_values(ilabels, graph) : Int[]
+    end
+
+    map!(gp.attributes, [:ilabels_plot_visible, :node_pos, :ilabel_node_ids], :ilabels_plot_positions) do visible, node_pos, nodes
+        visible ? [node_pos[i] for i in nodes] : Point2f[]
+    end
+
+    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_m, :ilabel_node_ids], :ilabels_plot_text) do visible, ilabels, nodes
+        visible ? [ilabels[i] for i in nodes] : []
+    end
+
+    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_color_m, :ilabel_node_ids], :ilabels_plot_colors) do visible, color, nodes
+        visible ? color[nodes] : color.default
+    end
+
+    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_fontsize_m, :ilabel_node_ids], :ilabels_plot_fontsize) do visible, fontsize, nodes
+        visible ? fontsize[nodes] : fontsize.default
+    end
+
+    ilabels_plot = text!(gp, gp[:ilabels_plot_positions];
+        text=gp[:ilabels_plot_text],
+        align=(:center, :center),
+        color=gp[:ilabels_plot_color],
+        fontsize=gp[:ilabels_plot_fontsize],
+        visible=gp[:ilabels_plot_visible],
+        # TODO: this breaks reactivity for ilabel attributes
+        gp.ilabels_attr[]...)
+    add_constant!(gp.attributes, :ilabels_plot, ilabels_plot) #make plotobj accessible
+
+    # MARK: resolve node attributes influenced by ilabels
+    map!(x->PerNodeAttribute(x, automatic), :node_size, :node_size_m)
+    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_plot, :ilabel_node_ids, :ilabels_fontsize_m, :node_size_m, :graph], :node_size_expanded) do ilabels_plot_visible, ilabels_plot, ilabel_node_ids, ilabels_fontsize, node_size, graph
+        if ilabels_plot_visible
+            # find the computed node sizes for all nodes with ilabels
+            overwritten_node_sizes = map(zip(ilabel_node_ids, Makie.fast_string_boundingboxes(ilabels_plot))) do (id, bb)
+                _ns = node_size[id]
                 if _ns === automatic
-                    norm(bb.widths) + 0.1 * ilabels_fontsize
+                    id => norm(bb.widths) + 0.1 * ilabels_fontsize[id]
                 else
-                    _ns
+                    id => _ns
+                end
+            end |> Dict
+
+            # add all non-ilabel nodes which have a non-default size
+            for v in vertices(graph)
+                _ns = node_size[v]
+                if !(v in ilabel_node_ids) && _ns !== automatic && _ns !== scene_theme.markersize[]
+                    overwritten_node_sizes[v] = _ns
                 end
             end
-        end
-    else
-        map!(gp.attributes, :node_size, :node_size_m) do node_size
-            node_size === automatic ? scene_theme.markersize[] : node_size
-        end
-    end
-
-    map!(gp.attributes, [:node_color, :ilabels], :node_color_m) do node_color, ilabels
-        if node_color === automatic
-            ilabels !== nothing ? :gray80 : scene_theme.markercolor[]
+            PerNodeAttribute(overwritten_node_sizes, scene_theme.markersize[])
         else
-            node_color
+            node_size.value === automatic ? PerNodeAttribute(scene_theme.markersize[]) : node_size  # assumes that users do not pass automatic per node.
         end
     end
 
-    map!(gp.attributes, [:node_marker, :ilabels], :node_marker_m) do node_marker, ilabels
-        if node_marker === automatic
-            ilabels !== nothing ? Circle : scene_theme.marker[]
+
+    map!(x->PerNodeAttribute(x, automatic), :node_color, :node_color_m) 
+    map!(gp.attributes, [:ilabels_plot_visible, :node_color_m, :ilabel_node_id, :graph], :node_color_expanded) do ilabels_plot_visible, node_color, ilabel_node_ids, graph
+        if ilabels_plot_visible
+            overwritten_node_colors = map(ilabel_node_ids) do id
+                _col = node_color[id]
+                id => _col == automatic ? :gray80 : _col
+            end |> Dict
+
+            for v in vertices(graph)
+                _col = node_color[v]
+                if !(v in ilabel_node_ids) && _col !== automatic && _col !== scene_theme.markercolor[]
+                    overwritten_node_colors[v] = _col
+                end
+            end
+            PerNodeAttribute(overwritten_node_colors, scene_theme.markercolor[])
         else
-            node_marker
+            node_color.value == automatic ? PerNodeAttribute(scene_theme.markercolor[]) : node_color
         end
     end
 
-    map!(gp.attributes, [:node_strokewidth, :ilabels], :node_strokewidth_m) do node_strokewidth, ilabels
-        if node_strokewidth === automatic
-            ilabels !== nothing ? 1.0 : scene_theme.markerstrokewidth[]
+
+    map!(x->PerNodeAttribute(x, automatic), :node_marker, :node_marker_m) 
+    map!(gp.attributes, [:ilabels_plot_visible, :node_marker_m, :ilabel_node_id, :graph], :node_marker_expanded) do ilabels_plot_visible, node_marker, ilabel_node_ids, graph
+        if ilabels_plot_visible
+            overwritten_node_markers = map(ilabel_node_ids) do id
+                _mark = node_marker[id]
+                id => _mark == automatic ? Circle : _mark
+            end |> Dict
+
+            for v in vertices(graph)
+                _mark = node_marker[v]
+                if !(v in ilabel_node_ids) && _mark !== automatic && _mark !== scene_theme.marker[]
+                    overwritten_node_markers[v] = _mark
+                end
+            end
+            PerNodeAttribute(overwritten_node_markers, scene_theme.marker[])
         else
-            node_strokewidth
+            node_marker.value == automatic ? PerNodeAttribute(scene_theme.marker[]) : node_marker
         end
     end
 
+    map!(x->PerNodeAttribute(x, automatic), :node_strokewidth, :node_strokewidth_m) 
+    map!(gp.attributes, [:ilabels_plot_visible, :node_strokewidth_m, :ilabel_node_id, :graph], :node_marker_expanded) do ilabels_plot_visible, node_strokewidth, ilabel_node_ids, graph
+        if ilabels_plot_visible
+            overwritten_node_strokewidths = map(ilabel_node_ids) do id
+                _sw = node_strokewidth[id]
+                id => _sw == automatic ? 1.0 : _sw
+            end |> Dict
+
+            for v in vertices(graph)
+                _sw = node_strokewidth[v]
+                if !(v in ilabel_node_ids) && _sw !== automatic && _sw !== scene_theme.markerstrokewidth[]
+                    overwritten_node_strokewidths[v] = _sw
+                end
+            end
+            PerNodeAttribute(overwritten_node_strokewidths, scene_theme.markerstrokewidth[])
+        else
+            node_strokewidth.value == automatic ? PerNodeAttribute(scene_theme.markerstrokewidth[]) : node_strokewidth
+        end
+    end
+
+    # MARK: edges
     # compute initial edge paths; will be adjusted later if arrow_shift = :end
     # create array of paths triggered by node_pos changes
     # in case of a graph change the node_position will change anyway

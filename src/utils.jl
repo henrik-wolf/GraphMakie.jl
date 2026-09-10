@@ -1,4 +1,5 @@
 export get_edge_plot, get_arrow_plot, get_node_plot, get_nlabel_plot, get_elabel_plot
+export PerNodeAttribute, nodes_with_values
 
 "Get the `EdgePlot` subplot from a `GraphPlot`."
 get_edge_plot(gp::GraphPlot) = gp.edge_plot[]
@@ -69,6 +70,61 @@ function getattr(x, idx, default=nothing)
         return x === nothing ? default : x
     end
 end
+
+"""
+    PerNodeAttribute(value, default=nothing)
+
+Wrap a node attribute so it can be accessed uniformly by node id.
+
+`value` may be a scalar, a vector indexed by node id, or a dict-like object
+indexed by node id. Missing dict entries fall back to `default`, except for
+`DefaultDict` and `DefaultOrderedDict`, which provide their own fallback.
+"""
+struct PerNodeAttribute{T,D}
+    value::T
+    default::D
+end
+
+PerNodeAttribute(value) = PerNodeAttribute(value, nothing)
+
+is_scalar_nothing(attr) = issingleattribute(attr.value) && isnothing(attr.value)
+
+Base.getindex(attr::PerNodeAttribute, node) = _per_node_getindex(attr.value, node, attr.default)
+function Base.getindex(attr::PerNodeAttribute, nodes::AbstractVector)
+    if issingleattribute(attr.value)
+        attr.value
+    else
+        [_per_node_getindex(attr.value, i, attr.default) for i in nodes]
+    end
+end
+
+function Base.get(attr::PerNodeAttribute, node, default)
+    if attr.value isa AbstractDict && !(attr.value isa Union{DefaultDict, DefaultOrderedDict})
+        return get(attr.value, node, default)
+    else
+        return attr[node]
+    end
+end
+
+function _per_node_getindex(value, node, default)
+    if value isa AbstractVector && !isa(value, Point)
+        return value[node]
+    elseif value isa DefaultDict || value isa DefaultOrderedDict
+        return value[node]
+    elseif value isa AbstractDict
+        return get(value, node, default)
+    else
+        return value
+        # return value === nothing ? default : value
+    end
+end
+
+"""
+    nodes_with_values(attr::PerNodeAttribute, graph)
+
+Return the vertices whose attribute value is not `nothing`.
+"""
+nodes_with_values(attr::PerNodeAttribute, graph::AbstractGraph) = filter(i->attr[i] !== nothing, vertices(graph))
 
 """
     prep_vertex_attributes(attr, graph::AbstractGraph, default_value)
