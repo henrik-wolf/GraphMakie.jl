@@ -214,8 +214,6 @@ function Makie.plot!(gp::GraphPlot)
     scene_theme = theme(gp)
     graph_theme = default_theme(gp, GraphPlot)
 
-    scatter!(gp, rand(100))
-
     # create initial vertex positions, will be updated on changes to graph or layout
     # make node_position-Observable available as named attribute from the outside
     map!(gp.attributes, [:layout, :graph], :node_pos) do layout, graph
@@ -246,7 +244,7 @@ function Makie.plot!(gp::GraphPlot)
             p1 = p0 + tangent(path, t)
             any(isnan, p1) && return 0.0  # lines with zero lengths might lead to NaN tangents
             pos_px = to_px(p1) - to_px(p0)
-            atan(pox_px[2], pos_px[1])
+            atan(pos_px[2], pos_px[1])
         end
     end
 
@@ -279,13 +277,13 @@ function Makie.plot!(gp::GraphPlot)
         end
     else
         map!(gp.attributes, :node_size, :node_size_m) do node_size
-            node_size === automatic ? scene_theme.markersize : node_size
+            node_size === automatic ? scene_theme.markersize[] : node_size
         end
     end
 
     map!(gp.attributes, [:node_color, :ilabels], :node_color_m) do node_color, ilabels
         if node_color === automatic
-            ilabels !== nothing ? :gray80 : scene_theme.markercolor
+            ilabels !== nothing ? :gray80 : scene_theme.markercolor[]
         else
             node_color
         end
@@ -293,7 +291,7 @@ function Makie.plot!(gp::GraphPlot)
 
     map!(gp.attributes, [:node_marker, :ilabels], :node_marker_m) do node_marker, ilabels
         if node_marker === automatic
-            ilabels !== nothing ? Circle : scene_theme.marker
+            ilabels !== nothing ? Circle : scene_theme.marker[]
         else
             node_marker
         end
@@ -301,7 +299,7 @@ function Makie.plot!(gp::GraphPlot)
 
     map!(gp.attributes, [:node_strokewidth, :ilabels], :node_strokewidth_m) do node_strokewidth, ilabels
         if node_strokewidth === automatic
-            ilabels !== nothing ? 1.0 : scene_theme.markerstrokewidth
+            ilabels !== nothing ? 1.0 : scene_theme.markerstrokewidth[]
         else
             node_strokewidth
         end
@@ -418,19 +416,19 @@ function Makie.plot!(gp::GraphPlot)
     # prepare node plot attributes
     # TODO: could probably be merged into one computation with node_color_m, and the other ones as well...
     map!(gp.attributes, [:node_color_m, :graph], :nodeplot_color) do color, graph
-        prep_vertex_attributes(color, graph, scene_theme.markercolor)
+        prep_vertex_attributes(color, graph, scene_theme.markercolor[])
     end
 
     map!(gp.attributes, [:node_marker_m, :graph], :nodeplot_marker) do marker, graph
-        prep_vertex_attributes(marker, graph, scene_theme.marker)
+        prep_vertex_attributes(marker, graph, scene_theme.marker[])
     end
 
     map!(gp.attributes, [:node_strokewidth_m, :graph], :nodeplot_strokewidth) do width, graph
-        prep_vertex_attributes(width, graph, scene_theme.markerstrokewidth)
+        prep_vertex_attributes(width, graph, scene_theme.markerstrokewidth[])
     end
 
     map!(gp.attributes, [:node_size_m, :graph], :nodeplot_markersize) do size, graph
-        prep_vertex_attributes(size, graph, scene_theme.markersize)
+        prep_vertex_attributes(size, graph, scene_theme.markersize[])
     end
 
     vertex_plot = scatter!(gp, gp[:node_pos];
@@ -609,7 +607,7 @@ end
 Returns an `AbstractPath` for each edge in the graph. Returns a vector of
 paths. If `attr.force_straight_edges` is `true`, the paths will be just plain lines
 """
-function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, curve_distance_usage, curve_distance, selfedge_size, selfedge_direction, selfedge_width, tangents, tfactor, waypoints, waypoint_radius) where {PT}
+function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, curve_distance_usage, curve_distance, selfedge_size, selfedge_direction, selfedge_width, tangents, tfactor, raw_waypoints, waypoint_radius) where {PT}
     # for straight_lines: return vector of Line rather than vector of AbstractPath
     if force_straight_edges
         return map(edges(g)) do e
@@ -625,12 +623,14 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
         tangents = getattr(tangents, i)
         tfactor = getattr(tfactor, i)
 
-        waypoints = let wps::Vector{PT} = getattr(waypoints, i, PT[]) 
-            if !isnothing(waypoints) && !isempty(waypoints) &&(waypoints[begin] == p1 || waypoints[end] == p2)
+
+        waypoints = let
+            wps::Vector{PT} = getattr(raw_waypoints, i, PT[]) 
+            if !isnothing(wps) && !isempty(wps) &&(wps[begin] == p1 || wps[end] == p2)
                 #remove p1 and p2 from waypoints if they are given
                     wps = copy(wps)
-                    waypoints[begin] == p1 && popfirst!(waypoints)
-                    waypoints[end] == p2 && pop!(waypoints)
+                    wps[begin] == p1 && popfirst!(wps)
+                    wps[end] == p2 && pop!(wps)
             else
                 wps
             end
@@ -662,7 +662,7 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
             size = getattr(selfedge_size, i)
             direction = getattr(selfedge_direction, i)
             width = getattr(selfedge_width, i)
-            paths[i] = selfedge_path(g, pos, src(e), size, direction, width)
+            paths[i] = selfedge_path(g, node_pos, src(e), size, direction, width)
         elseif !isnothing(tangents)
             paths[i] = Path(p1, p2; tangents, tfactor)
         elseif PT <: Point2 && !iszero(curve_distance)
