@@ -90,6 +90,20 @@ function get_difference(old, new, score_color)
     canvas
 end
 
+function delete_conflicts_for(asset)
+    parts = rsplit(asset, "."; limit=2)
+    @assert length(parts) == 2
+
+    conflict_assets = (
+        parts[1] * "+." * parts[2],
+        parts[1] * ".diff." * parts[2],
+    )
+    for conflict in conflict_assets
+        path = joinpath(ASSETS, conflict)
+        isfile(path) && rm(path)
+    end
+end
+
 # now test all the generated graphics in the TMPDIR and compare against files in assets dir
 @testset "Reference Tests" begin
     for ass in oldassets
@@ -120,6 +134,7 @@ end
             printstyled(" ✓ [", repr(round(score, digits=1)), "] $ass\n"; color=:green)
             @test true
             rm(new)
+            delete_conflicts_for(ass)
         else
             if score > MEH
                 printstyled(" ? [", repr(round(score, digits=1)), "] $ass\n"; color=:yellow)
