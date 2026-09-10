@@ -610,7 +610,7 @@ end
 Returns an `AbstractPath` for each edge in the graph. Returns a vector of
 paths. If `attr.force_straight_edges` is `true`, the paths will be just plain lines
 """
-function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, curve_distance_usage, curve_distance, selfedge_size, selfedge_direction, selfedge_width, tangents, tfactor, raw_waypoints, waypoint_radius) where {PT}
+function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, curve_distance_usage, curve_distance, selfedge_size, selfedge_direction, selfedge_width, tangents, tfactor, waypoints, waypoint_radius) where {PT}
     # for straight_lines: return vector of Line rather than vector of AbstractPath
     if force_straight_edges
         return map(edges(g)) do e
@@ -623,12 +623,12 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
     for (i, e) in enumerate(edges(g))
         p1, p2 = node_pos[src(e)], node_pos[dst(e)]
 
-        tangents = getattr(tangents, i)
-        tfactor = getattr(tfactor, i)
+        tangents_i = getattr(tangents, i)
+        tfactor_i = getattr(tfactor, i)
 
 
-        waypoints = let
-            wps::Vector{PT} = getattr(raw_waypoints, i, PT[]) 
+        waypoints_i = let
+            wps::Vector{PT} = getattr(waypoints, i, PT[]) 
             if !isnothing(wps) && !isempty(wps) &&(wps[begin] == p1 || wps[end] == p2)
                 #remove p1 and p2 from waypoints if they are given
                     wps = copy(wps)
@@ -640,24 +640,25 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
         end
 
         cdu = getattr(curve_distance_usage, i)
+        curve_distance_i = 0.0
         if cdu === true
-            curve_distance = getattr(curve_distance, i, 0.0)
+            curve_distance_i = getattr(curve_distance, i, 0.0)
         elseif cdu === false
-            curve_distance = 0.0
+            curve_distance_i = 0.0
         elseif cdu === automatic
             if is_directed(g) && has_edge(g, dst(e), src(e))
-                curve_distance = getattr(curve_distance, i, 0.0)
+                curve_distance_i = getattr(curve_distance, i, 0.0)
             else
-                curve_distance = 0.0
+                curve_distance_i = 0.0
             end
         end
 
-        if !isnothing(waypoints) && !isempty(waypoints) #there are waypoints
+        if !isnothing(waypoints_i) && !isempty(waypoints_i) #there are waypoints
             radius = getattr(waypoint_radius, i, nothing)
             if radius === nothing || radius === :spline
-                paths[i] = Path(p1, waypoints..., p2; tangents, tfactor)
+                paths[i] = Path(p1, waypoints_i..., p2; tangents=tangents_i, tfactor=tfactor_i)
             elseif radius isa Real
-                paths[i] = Path(radius, p1, waypoints..., p2)
+                paths[i] = Path(radius, p1, waypoints_i..., p2)
             else
                 throw(ArgumentError("Invalid radius $radius for edge $i!"))
             end
@@ -666,10 +667,10 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
             direction = getattr(selfedge_direction, i)
             width = getattr(selfedge_width, i)
             paths[i] = selfedge_path(g, node_pos, src(e), size, direction, width)
-        elseif !isnothing(tangents)
-            paths[i] = Path(p1, p2; tangents, tfactor)
-        elseif PT <: Point2 && !iszero(curve_distance)
-            paths[i] = curved_path(p1, p2, curve_distance)
+        elseif !isnothing(tangents_i)
+            paths[i] = Path(p1, p2; tangents=tangents_i, tfactor=tfactor_i)
+        elseif PT <: Point2 && !iszero(curve_distance_i)
+            paths[i] = curved_path(p1, p2, curve_distance_i)
         else # straight line
             paths[i] = Path(p1, p2)
         end
