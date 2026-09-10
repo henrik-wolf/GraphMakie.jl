@@ -97,8 +97,9 @@ function graphplot_docstring(PlotType)
 end
 
 @recipe GraphPlot (graph,) begin
-    "function `AbstractGraph->Vector{Point}` or `Vector{Point}` that determines the base layout.  Can also be any network layout from [NetworkLayout.jl](https://github.com/JuliaGraphs/NetworkLayout.jl), like `Spring`, `Stress`, `Spectral`, etc."
-    layout=Spring()     # node attributes (Scatter)
+    "Function `AbstractGraph->Vector{Point}` or `Vector{Point}` that determines the base layout. Can also be any network layout from [NetworkLayout.jl](https://github.com/JuliaGraphs/NetworkLayout.jl), like `Spring`, `Stress`, `Spectral`, etc., defaults to `Spring()`"
+    layout=automatic
+    # node attributes (Scatter)
     "Defaults to `@inherit markercolor` in absence of `ilabels`."
     node_color=automatic
     "Defaults to `@inherit markersize` in absence of `ilabels`. Otherwise choses node size based on `ilabels` size."
@@ -216,6 +217,7 @@ function Makie.plot!(gp::GraphPlot)
 
     # create initial vertex positions, will be updated on changes to graph or layout
     # make node_position-Observable available as named attribute from the outside
+    default_layout = Spring()
     map!(gp.attributes, [:layout, :graph], :node_pos) do layout, graph
         if layout isa AbstractVector
             if length(layout) != nv(graph)
@@ -224,7 +226,8 @@ function Makie.plot!(gp::GraphPlot)
                 to_pointf32.(layout)
             end
         else
-            [to_pointf32(p) for p in layout(graph)]
+            resolved_layout = layout === automatic ? default_layout : layout
+            [to_pointf32(p) for p in resolved_layout(graph)]
         end
     end
 
@@ -268,7 +271,7 @@ function Makie.plot!(gp::GraphPlot)
             bbs = Makie.fast_string_boundingboxes(ilp)
             map(enumerate(bbs)) do (i, bb)
                 _ns = getattr(node_size, i)
-                if _ns == automatic
+                if _ns === automatic
                     norm(bb.widths) + 0.1 * ilabels_fontsize
                 else
                     _ns
@@ -516,7 +519,7 @@ function Makie.plot!(gp::GraphPlot)
                 if valrot isa Real
                     # fix rotation to a single angle
                     rot[i] = valrot
-                elseif valrot == automatic
+                elseif valrot === automatic
                     # point the labels up
                     if (rot[i] > π/2 || rot[i] < - π/2)
                         rot[i] += π
@@ -587,7 +590,7 @@ function elabels_distance_offset(g, attrs)
             elseif attrvalside == :center
                 offs[i] = zero(attrval)
             end
-        elseif attrval == automatic
+        elseif attrval === automatic
             offval = (getattr(attrs.elabels_fontsize, i) + getattr(attrs.edge_width, i))/2
             if attrvalside == :left
                 offs[i] = offval
