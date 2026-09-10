@@ -211,7 +211,7 @@ let
 end
 
 function Makie.plot!(gp::GraphPlot)
-    dfth = default_theme(gp.parent, GraphPlot)
+    dfth = theme(gp)
 
     # create initial vertex positions, will be updated on changes to graph or layout
     # make node_position-Observable available as named attribute from the outside
@@ -276,13 +276,13 @@ function Makie.plot!(gp::GraphPlot)
         end
     else
         map!(gp.attributes, :node_size, :node_size_m) do node_size
-            node_size === automatic ? scatter_theme.markersize : node_size
+            node_size === automatic ? dfth.markersize : node_size
         end
     end
 
     map!(gp.attributes, [:node_color, :ilabels], :node_color_m) do node_color, ilabels
         if node_color === automatic
-            ilabels !== nothing ? :gray80 : scatter_theme.color
+            ilabels !== nothing ? :gray80 : dfth.markercolor
         else
             node_color
         end
@@ -290,7 +290,7 @@ function Makie.plot!(gp::GraphPlot)
 
     map!(gp.attributes, [:node_marker, :ilabels], :node_marker_m) do node_marker, ilabels
         if node_marker === automatic
-            ilabels !== nothing ? Circle : scatter_theme.marker
+            ilabels !== nothing ? Circle : dfth.marker
         else
             node_marker
         end
@@ -298,7 +298,7 @@ function Makie.plot!(gp::GraphPlot)
 
     map!(gp.attributes, [:node_strokewidth, :ilabels], :node_strokewidth_m) do node_strokewidth, ilabels
         if node_strokewidth === automatic
-            ilabels !== nothing ? 1.0 : scatter_theme.strokewidth
+            ilabels !== nothing ? 1.0 : dfth.strokewidth
         else
             node_strokewidth
         end
@@ -307,9 +307,17 @@ function Makie.plot!(gp::GraphPlot)
     # compute initial edge paths; will be adjusted later if arrow_shift = :end
     # create array of paths triggered by node_pos changes
     # in case of a graph change the node_position will change anyway
-    map!(gp.attributes, [:node_pos, :selfedge_size, :selfedge_direction, :selfedge_width, :curve_distance_usage, :curve_distance, :graph], :edge_paths) do pos, s, d, w, cdu, cd, g
-        find_edge_paths(g, gp.attributes, pos)
-    end
+map!(
+    gp.attributes, [
+        :graph, :node_pos, :force_straight_edges, :curve_distance_usage, :curve_distance,
+        :selfedge_size, :selfedge_direction, :selfedge_width,
+        :tangents, :tfactor, :waypoints, :waypoint_radius,
+    ], :edge_paths
+) do graph, node_pos, args...
+    find_edge_paths(graph, node_pos, args...)
+end
+
+
 
     map!(gp.attributes, [:arrow_show, :graph], :arrow_show_m) do arrow_show, g
         return arrow_show === automatic ? Graphs.is_directed(g) : arrow_show
@@ -593,25 +601,35 @@ end
 Returns an `AbstractPath` for each edge in the graph. Returns a vector of
 paths. If `attr.force_straight_edges` is `true`, the paths will be just plain lines
 """
-function find_edge_paths(g, attr, pos::AbstractVector{PT}) where {PT}
+function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, curve_distance_usage, curve_distance, selfedge_size, selfedge_direction, selfedge_width, tangents, tfactor, waypoints, waypoint_radius) where {PT}
     # for straight_lines: return vector of Line rather than vector of AbstractPath
-    if attr.force_straight_edges[]
+    if force_straight_edges
         return map(edges(g)) do e
-            p1, p2 = pos[src(e)], pos[dst(e)]
+            p1, p2 = node_pos[src(e)], node_pos[dst(e)]
             Path(p1, p2)
         end
     end
 
     paths = Vector{AbstractPath{PT}}(undef, ne(g))
     for (i, e) in enumerate(edges(g))
-        p1, p2 = pos[src(e)], pos[dst(e)]
+        p1, p2 = node_pos[src(e)], node_pos[dst(e)]
 
-        tangents = getattr(attr.tangents, i)
-        tfactor = getattr(attr.tfactor, i)
-        waypoints::Vector{PT} = getattr(attr.waypoints, i, PT[])
-        if !isnothing(waypoints) && !isempty(waypoints) #remove p1 and p2 from waypoints if these are given
-            waypoints[begin] == p1 && popfirst!(waypoints)
-            waypoints[end] == p2 && pop!(waypoints)
+        tangents = getattr(tangents, i)
+        tfactor = getattr(tfactor, i)
+        waypoints::Vector{PT} = getattr(waypoints, i, PT[])
+        waypoints = let wps::Vector{PT} = getattr(waypoints, i, PT[]) 
+            if !isnothing(waypoints) && !isempty(waypoints) #remove p1 and p2 from waypoints if they are given
+                if waypoints[begin] == p1 || waypoints[end] == p2
+                    wps = copy(wps)
+                    waypoints[begin] == p1 && popfirst!(waypoints)
+                    waypoints[end] == p2 && pop!(waypoints)
+                else
+                    wps
+                end
+
+            else
+                wps
+            end
         end
 
         cdu = getattr(attr.curve_distance_usage, i)
@@ -643,7 +661,7 @@ function find_edge_paths(g, attr, pos::AbstractVector{PT}) where {PT}
             paths[i] = selfedge_path(g, pos, src(e), size, direction, width)
         elseif !isnothing(tangents)
             paths[i] = Path(p1, p2; tangents, tfactor)
-        elseif PT<:Point2 && !iszero(curve_distance)
+        elseif PT <: Point2 && !iszero(curve_distance)
             paths[i] = curved_path(p1, p2, curve_distance)
         else # straight line
             paths[i] = Path(p1, p2)
