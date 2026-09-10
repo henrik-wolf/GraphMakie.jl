@@ -105,7 +105,7 @@ end
     node_size=automatic
     "Defaults to `@inherit marker` in absence of `ilabels`."
     node_marker=automatic
-    "Defaults to `@inherit strokewidth` in absence of `ilabels`."
+    "Defaults to `@inherit markerstrokewidth` in absence of `ilabels`."
     node_strokewidth=automatic
     "Creates a small gap between edges and nodes. `nothing` skips the calcuation while `0.0` adjusts the endpoints to the edges of the marker, which can be useful with transparent nodes."
     node_outset=nothing
@@ -211,7 +211,10 @@ let
 end
 
 function Makie.plot!(gp::GraphPlot)
-    dfth = theme(gp)
+    scene_theme = theme(gp)
+    graph_theme = default_theme(gp, GraphPlot)
+
+    scatter!(gp, rand(100))
 
     # create initial vertex positions, will be updated on changes to graph or layout
     # make node_position-Observable available as named attribute from the outside
@@ -237,19 +240,18 @@ function Makie.plot!(gp::GraphPlot)
         (point) -> project(sc, point)
     end
     # get angle in px space from path p at point t
-    map!(gp.attributes, :to_px, :to_angle) do tpx_func
+    map!(gp.attributes, :to_px, :to_angle) do to_px
         (path, p0, t) -> begin
             # TODO: maybe shorter tangent? For some perspectives this might give wrong angles in 3d
             p1 = p0 + tangent(path, t)
             any(isnan, p1) && return 0.0  # lines with zero lengths might lead to NaN tangents
-            tpx = tpx_func(p1) - tpx_func(p0)
-            atan(tpx[2], tpx[1])
+            pos_px = to_px(p1) - to_px(p0)
+            atan(pox_px[2], pos_px[1])
         end
     end
 
     # plot inside labels
-    scatter_theme = default_theme(sc, Scatter)
-
+    # TODO: this makes reactive swapping of ilabels impossible
     if gp[:ilabels][] !== nothing
         map!(gp.attributes, :ilabels, :ilabels_text) do ilabels
             string.(ilabels)
@@ -260,6 +262,7 @@ function Makie.plot!(gp::GraphPlot)
             align=(:center, :center),
             color=gp.ilabels_color,
             fontsize=gp.ilabels_fontsize,
+            # TODO: this breaks reactivity for ilabel attributes
             gp.ilabels_attr[]...)
         add_constant!(gp.attributes, :ilabels_plot, ilabels_plot) #make plotobj accessible
 
@@ -276,13 +279,13 @@ function Makie.plot!(gp::GraphPlot)
         end
     else
         map!(gp.attributes, :node_size, :node_size_m) do node_size
-            node_size === automatic ? dfth.markersize : node_size
+            node_size === automatic ? scene_theme.markersize : node_size
         end
     end
 
     map!(gp.attributes, [:node_color, :ilabels], :node_color_m) do node_color, ilabels
         if node_color === automatic
-            ilabels !== nothing ? :gray80 : dfth.markercolor
+            ilabels !== nothing ? :gray80 : scene_theme.markercolor
         else
             node_color
         end
@@ -290,7 +293,7 @@ function Makie.plot!(gp::GraphPlot)
 
     map!(gp.attributes, [:node_marker, :ilabels], :node_marker_m) do node_marker, ilabels
         if node_marker === automatic
-            ilabels !== nothing ? Circle : dfth.marker
+            ilabels !== nothing ? Circle : scene_theme.marker
         else
             node_marker
         end
@@ -298,7 +301,7 @@ function Makie.plot!(gp::GraphPlot)
 
     map!(gp.attributes, [:node_strokewidth, :ilabels], :node_strokewidth_m) do node_strokewidth, ilabels
         if node_strokewidth === automatic
-            ilabels !== nothing ? 1.0 : dfth.strokewidth
+            ilabels !== nothing ? 1.0 : scene_theme.markerstrokewidth
         else
             node_strokewidth
         end
@@ -307,40 +310,37 @@ function Makie.plot!(gp::GraphPlot)
     # compute initial edge paths; will be adjusted later if arrow_shift = :end
     # create array of paths triggered by node_pos changes
     # in case of a graph change the node_position will change anyway
-map!(
-    gp.attributes, [
-        :graph, :node_pos, :force_straight_edges, :curve_distance_usage, :curve_distance,
-        :selfedge_size, :selfedge_direction, :selfedge_width,
-        :tangents, :tfactor, :waypoints, :waypoint_radius,
-    ], :edge_paths
-) do graph, node_pos, args...
-    find_edge_paths(graph, node_pos, args...)
-end
-
-
+    map!(
+        gp.attributes, [
+            :graph, :node_pos, :force_straight_edges, :curve_distance_usage, :curve_distance,
+            :selfedge_size, :selfedge_direction, :selfedge_width,
+            :tangents, :tfactor, :waypoints, :waypoint_radius,
+        ], :edge_paths
+    ) do graph, node_pos, args...
+        find_edge_paths(graph, node_pos, args...)
+    end
 
     map!(gp.attributes, [:arrow_show, :graph], :arrow_show_m) do arrow_show, g
         return arrow_show === automatic ? Graphs.is_directed(g) : arrow_show
     end
 
-    # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
+    # # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
     map!(gp.attributes,
          [:graph, :edge_paths, :node_pos, :to_px, :node_marker_m, :node_size_m, :node_outset, :edge_outset,
           :arrow_marker, :arrow_shift, :arrow_size, :arrow_show_m],
          :start_end_shifts
-         ) do g, paths, node_pos, tpx, nmarker, nsize, noutset, eoutset, arrow_marker, arrow_shift, arrow_size,
+         ) do g, paths, node_pos, to_px, nmarker, nsize, noutset, eoutset, arrow_marker, arrow_shift, arrow_size,
               arrow_show
-        return find_start_end_shift(g, paths, node_pos, tpx, nmarker, nsize, noutset, eoutset, arrow_marker,
+        return find_start_end_shift(g, paths, node_pos, to_px, nmarker, nsize, noutset, eoutset, arrow_marker,
                                     arrow_shift, arrow_size, arrow_show)
     end
 
-    # prepare arrow heads
+    # # prepare arrow heads
     map!(gp.attributes,
          [:edge_paths, :start_end_shifts, :arrow_shift],
          :arrow_shift_m) do edge_paths, start_end_shifts, arrow_shift
-        return update_arrow_shift(edge_paths, start_end_shifts, arrow_shift)
+        return find_arrow_shift(edge_paths, start_end_shifts, arrow_shift)
     end
-
 
     map!(gp.attributes, [:edge_paths, :arrow_shift_m, :node_pos],
          :arrow_pos
@@ -356,10 +356,10 @@ end
 
     map!(gp.attributes,
          [:edge_paths, :to_angle, :arrow_shift_m, :arrow_pos], :arrow_rot
-         ) do paths, tangle, arrow_shifts, arrow_positions
+         ) do paths, to_angle, arrow_shifts, arrow_positions
         if !isempty(paths)
             angles = map(paths, arrow_shifts, arrow_positions) do path, shift, arrow_pos
-                return tangle(path, arrow_pos, shift)
+                return to_angle(path, arrow_pos, shift)
             end
             Billboard(angles)
         else
@@ -369,15 +369,15 @@ end
 
     # prepare edge plot attributes (makes them vectors of length ne(g) or single elements)
     map!(gp.attributes, [:edge_color, :graph], :edgeplot_color) do color, graph
-        prep_edge_attributes(color, graph, dfth.edge_color[])
+        prep_edge_attributes(color, graph, graph_theme.edge_color)
     end
 
     map!(gp.attributes, [:edge_width, :graph], :edgeplot_linewidth) do width, graph
-        prep_edge_attributes(width, graph, dfth.edge_width[])
+        prep_edge_attributes(width, graph, graph_theme.edge_width)
     end
 
     map!(gp.attributes, [:edge_linestyle, :graph], :edgeplot_linestyle) do style, graph
-        prep_edge_attributes(style, graph, dfth.edge_linestyle[])
+        prep_edge_attributes(style, graph, graph_theme.edge_linestyle)
     end
 
     # actually plot edges
@@ -385,20 +385,21 @@ end
         color=gp[:edgeplot_color],
         linewidth=gp[:edgeplot_linewidth],
         linestyle=gp[:edgeplot_linestyle],
+        # TODO: this drops reactivity for edge attributes
         gp.edge_attr[]...)
     add_constant!(gp.attributes, :edge_plot, edge_plot) #make plotobj accessible
 
-    # prepare arrow plot attributes
+    # # prepare arrow plot attributes
     map!(gp.attributes, [:arrow_marker, :graph], :arrowplot_marker) do marker, graph
-        prep_edge_attributes(marker, graph, dfth.arrow_marker[])
+        prep_edge_attributes(marker, graph, graph_theme.arrow_marker)
     end
 
     map!(gp.attributes, [:arrow_size, :graph], :arrowplot_markersize) do size, graph
-        prep_edge_attributes(size, graph, dfth.arrow_size[])
+        prep_edge_attributes(size, graph, graph_theme.arrow_size)
     end
 
     map!(gp.attributes, [:edge_color, :graph], :arrowplot_color) do color, graph
-        prep_edge_attributes(color, graph, dfth.edge_color[])
+        prep_edge_attributes(color, graph, graph_theme.edge_color)
     end
 
     arrow_plot = scatter!(gp,
@@ -410,25 +411,26 @@ end
         strokewidth = 0.0,
         markerspace = :pixel,
         visible = gp[:arrow_show_m],
+        # TODO: this drops reactivity for arrow attributes
         gp.arrow_attr[]...)
     add_constant!(gp.attributes, :arrow_plot, arrow_plot) #make plotobj accessible
 
-
     # prepare node plot attributes
+    # TODO: could probably be merged into one computation with node_color_m, and the other ones as well...
     map!(gp.attributes, [:node_color_m, :graph], :nodeplot_color) do color, graph
-        prep_vertex_attributes(color, graph, scatter_theme.color)
+        prep_vertex_attributes(color, graph, scene_theme.markercolor)
     end
 
     map!(gp.attributes, [:node_marker_m, :graph], :nodeplot_marker) do marker, graph
-        prep_vertex_attributes(marker, graph, scatter_theme.marker)
-    end
-
-    map!(gp.attributes, [:node_size_m, :graph], :nodeplot_markersize) do size, graph
-        prep_vertex_attributes(size, graph, scatter_theme.markersize)
+        prep_vertex_attributes(marker, graph, scene_theme.marker)
     end
 
     map!(gp.attributes, [:node_strokewidth_m, :graph], :nodeplot_strokewidth) do width, graph
-        prep_vertex_attributes(width, graph, scatter_theme.strokewidth)
+        prep_vertex_attributes(width, graph, scene_theme.markerstrokewidth)
+    end
+
+    map!(gp.attributes, [:node_size_m, :graph], :nodeplot_markersize) do size, graph
+        prep_vertex_attributes(size, graph, scene_theme.markersize)
     end
 
     vertex_plot = scatter!(gp, gp[:node_pos];
@@ -436,10 +438,12 @@ end
         marker=gp[:nodeplot_marker],
         markersize=gp[:nodeplot_markersize],
         strokewidth=gp[:nodeplot_strokewidth],
+        # TODO: this drops reactivity for node attributes
         gp[:node_attr][]...)
     add_constant!(gp.attributes, :node_plot, vertex_plot) #make plotobj accessible
 
     # plot node labels
+    # TODO: this makes reactive swapping of nlabels impossible
     if gp.nlabels[] !== nothing
         map!(gp.attributes, [:node_pos, :nlabels_offset], :nlabels_positions) do np, offset
             if offset != nothing
@@ -450,6 +454,7 @@ end
         end
 
         map!(gp.attributes, [:nlabels_align, :nlabels_distance], :nlabels_offset_processed) do align, distance
+            # TODO: this probably does not work with a dict, where many other things seem to do?
             if align isa Vector
                 distance .* align_to_dir.(align)
             else
@@ -463,15 +468,15 @@ end
         end
 
         map!(gp.attributes, [:nlabels_align, :graph], :nlabels_align_processed) do align, graph
-            prep_vertex_attributes(align, graph, dfth.nlabels_align[])
+            prep_vertex_attributes(align, graph, graph_theme.nlabels_align)
         end
 
         map!(gp.attributes, [:nlabels_color, :graph], :nlabels_color_processed) do color, graph
-            prep_vertex_attributes(color, graph, dfth.nlabels_color[])
+            prep_vertex_attributes(color, graph, graph_theme.nlabels_color)
         end
 
         map!(gp.attributes, [:nlabels_fontsize, :graph], :nlabels_fontsize_processed) do fontsize, graph
-            prep_vertex_attributes(fontsize, graph, dfth.nlabels_fontsize[])
+            prep_vertex_attributes(fontsize, graph, graph_theme.nlabels_fontsize)
         end
 
         nlabels_plot = text!(gp, gp[:nlabels_positions];
@@ -480,6 +485,7 @@ end
             color=gp[:nlabels_color_processed],
             offset=gp[:nlabels_offset_processed],
             fontsize=gp[:nlabels_fontsize_processed],
+            # TODO: this drops reactivity for node label attributes
             gp.nlabels_attr[]...)
         add_constant!(gp.attributes, :nlabels_plot, nlabels_plot) #make plotobj accessible
     end
@@ -492,6 +498,7 @@ end
     end
 
     # plot edge labels
+    # TODO: this makes reactive swapping of edge labels impossible
     if gp.elabels[] !== nothing
         # positions: center point between nodes + offset + distance*normal + shift*edge direction
         map!(gp.attributes, [:edge_paths, :elabels_shift, :elabels_offset], :elabels_positions) do paths, shift, eloffset
@@ -504,8 +511,8 @@ end
         end
 
         # rotations based on the edge_vec_px and opposite argument
-        map!(gp.attributes, [:elabels_rotation, :to_angle, :elabels_positions, :edge_paths, :elabels_shift, :graph], :elabels_rotation_computed) do elabrots, tangle, pos, paths, shift, g
-            rot = broadcast(tangle, paths, pos, shift)
+        map!(gp.attributes, [:elabels_rotation, :to_angle, :elabels_positions, :edge_paths, :elabels_shift, :graph], :elabels_rotation_computed) do elabrots, to_angle, pos, paths, shift, g
+            rot = broadcast(to_angle, paths, pos, shift)
             for i in 1:ne(g)
                 valrot = getattr(elabrots, i, nothing)
                 if valrot isa Real
@@ -522,10 +529,10 @@ end
         end
 
         # calculate the offset in pixels in normal direction to the edge
-        map!(gp.attributes, [:elabels_positions, :to_px, :elabels_distance, :elabels_side, :edge_paths, :elabels_shift, :graph, :elabels_fontsize, :edge_width], :elabels_offsets) do pos, tpx, dist, side, paths, shift, g, fontsize, edge_width
+        map!(gp.attributes, [:elabels_positions, :to_px, :elabels_distance, :elabels_side, :edge_paths, :elabels_shift, :graph, :elabels_fontsize, :edge_width], :elabels_offsets) do pos, to_px, dist, side, paths, shift, g, fontsize, edge_width
             tangent_px = broadcast(paths, pos, shift) do path, p0, t
                 p1 = p0 + tangent(path, t)
-                tpx(p1) - tpx(p0)
+                to_px(p1) - to_px(p0)
             end
 
             offsets = map(p -> Point(-p.data[2], p.data[1])/norm(p), tangent_px)
@@ -538,15 +545,15 @@ end
         end
 
         map!(gp.attributes, [:elabels_align, :graph], :elabels_align_processed) do align, graph
-            prep_edge_attributes(align, graph, dfth.elabels_align[])
+            prep_edge_attributes(align, graph, graph_theme.elabels_align)
         end
 
         map!(gp.attributes, [:elabels_color, :graph], :elabels_color_processed) do color, graph
-            prep_edge_attributes(color, graph, dfth.elabels_color[])
+            prep_edge_attributes(color, graph, graph_theme.elabels_color)
         end
 
         map!(gp.attributes, [:elabels_fontsize, :graph], :elabels_fontsize_processed) do fontsize, graph
-            prep_edge_attributes(fontsize, graph, dfth.elabels_fontsize[])
+            prep_edge_attributes(fontsize, graph, graph_theme.elabels_fontsize)
         end
 
         elabels_plot = text!(gp, gp[:elabels_positions];
@@ -556,6 +563,7 @@ end
             align=gp[:elabels_align_processed],
             color=gp[:elabels_color_processed],
             fontsize=gp[:elabels_fontsize_processed],
+            # TODO: this drops reactivity for edge label attributes
             gp.elabels_attr[]...)
         add_constant!(gp.attributes, :elabels_plot, elabels_plot) #make plotobj accessible
     end
@@ -862,12 +870,12 @@ function _split_arg!(cg::Makie.ComputeGraph, name, i)
 end
 
 """
-    update_arrow_shift(g, gp, edge_paths::Vector{<:AbstractPath{PT}}, to_px) where {PT}
+    find_arrow_shift(g, gp, edge_paths::Vector{<:AbstractPath{PT}}, to_px) where {PT}
 
 Checks `arrow_shift` attr so that `arrow_shift = :end` gets transformed so that the arrowhead for that edge
 lands on the surface of the destination node.
 """
-function update_arrow_shift(edge_paths::Vector{<:AbstractPath{PT}}, start_end_shifts, arrow_shifts) where {PT}
+function find_arrow_shift(edge_paths::Vector{<:AbstractPath{PT}}, start_end_shifts, arrow_shifts) where {PT}
     arrow_shift = Vector{Float32}(undef, length(start_end_shifts))
 
     for (i, (_, end_shift)) in enumerate(start_end_shifts)
@@ -881,7 +889,7 @@ function update_arrow_shift(edge_paths::Vector{<:AbstractPath{PT}}, start_end_sh
     return arrow_shift
 end
 
-function update_arrow_shift(edge_paths::Vector{<:AbstractPath{<:Point3}}, start_end_shifts, arrow_shifts)
+function find_arrow_shift(edge_paths::Vector{<:AbstractPath{<:Point3}}, start_end_shifts, arrow_shifts)
     arrow_shift = Vector{Float32}(undef, length(start_end_shifts))
 
     for (i, e) in enumerate(start_end_shifts)
