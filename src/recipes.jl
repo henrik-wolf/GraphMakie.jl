@@ -627,13 +627,13 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
         tfactor_i = getattr(tfactor, i)
 
 
-        waypoints_i = let
-            wps::Vector{PT} = getattr(waypoints, i, PT[]) 
+        waypoints_i = let wps::Vector{PT} = getattr(waypoints, i, PT[]) 
             if !isnothing(wps) && !isempty(wps) &&(wps[begin] == p1 || wps[end] == p2)
-                #remove p1 and p2 from waypoints if they are given
+                    #remove p1 and p2 from waypoints if they are given
                     wps = copy(wps)
                     wps[begin] == p1 && popfirst!(wps)
                     wps[end] == p2 && pop!(wps)
+                    wps
             else
                 wps
             end
