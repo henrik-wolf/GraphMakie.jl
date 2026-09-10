@@ -115,7 +115,7 @@ end
     # edge attributes (LineSegements)
     "Color for edges."
     edge_color = @inherit linecolor
-    "Pass a vector with 2 width per edge to get pointy edges."  # TODO: figure out what this means
+    "Edge width. On backends that support variable linewidths, you can use a tuple `(start, stop)` per edge for tapered edges."
     edge_width = @inherit linewidth
     "Linestyle of edges. Can also be vector or dict for per-edge styling. When using different linestyles for different edges, GraphMakie creates separate line plots for each edge rather than combining them into one plot, which may reduce performance for graphs with many edges. For optimal performance with large graphs, use homogeneous linestyles."
     edge_linestyle=:solid
