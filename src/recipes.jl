@@ -253,45 +253,45 @@ function Makie.plot!(gp::GraphPlot)
 
     # MARK: Set up data for ilabels plot
     map!(PerNodeAttribute, gp.attributes, :ilabels, :ilabels_m)
-    map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), :ilabels_color, :ilabels_color_m)
-    map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), :ilabels_fontsize, :ilabels_fontsize_m)
+    map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :ilabels_color, :ilabels_color_m)
+    map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :ilabels_fontsize, :ilabels_fontsize_m)
 
-    map!(!is_scalar_nothing, gp.attributes, :ilabels_m, :ilabels_plot_visible)
+    map!(!is_scalar_nothing, gp.attributes, :ilabels_m, :ilabel_plot_visible)
 
-    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_m, :graph], :ilabel_node_ids) do visible, ilabels, graph
+    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_m, :graph], :ilabel_node_ids) do visible, ilabels, graph
        visible ? nodes_with_values(ilabels, graph) : Int[]
     end
 
-    map!(gp.attributes, [:ilabels_plot_visible, :node_pos, :ilabel_node_ids], :ilabels_plot_positions) do visible, node_pos, nodes
+    map!(gp.attributes, [:ilabel_plot_visible, :node_pos, :ilabel_node_ids], :ilabel_plot_positions) do visible, node_pos, nodes
         visible ? [node_pos[i] for i in nodes] : Point2f[]
     end
 
-    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_m, :ilabel_node_ids], :ilabels_plot_text) do visible, ilabels, nodes
+    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_m, :ilabel_node_ids], :ilabel_plot_text) do visible, ilabels, nodes
         visible ? [ilabels[i] for i in nodes] : []
     end
 
-    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_color_m, :ilabel_node_ids], :ilabels_plot_colors) do visible, color, nodes
+    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_color_m, :ilabel_node_ids], :ilabel_plot_color) do visible, color, nodes
         visible ? color[nodes] : color.default
     end
 
-    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_fontsize_m, :ilabel_node_ids], :ilabels_plot_fontsize) do visible, fontsize, nodes
+    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_fontsize_m, :ilabel_node_ids], :ilabel_plot_fontsize) do visible, fontsize, nodes
         visible ? fontsize[nodes] : fontsize.default
     end
 
-    ilabels_plot = text!(gp, gp[:ilabels_plot_positions];
-        text=gp[:ilabels_plot_text],
+    ilabels_plot = text!(gp, gp[:ilabel_plot_positions];
+        text=gp[:ilabel_plot_text],
         align=(:center, :center),
-        color=gp[:ilabels_plot_color],
-        fontsize=gp[:ilabels_plot_fontsize],
-        visible=gp[:ilabels_plot_visible],
+        color=gp[:ilabel_plot_color],
+        fontsize=gp[:ilabel_plot_fontsize],
+        visible=gp[:ilabel_plot_visible],
         # TODO: this breaks reactivity for ilabel attributes
         gp.ilabels_attr[]...)
     add_constant!(gp.attributes, :ilabels_plot, ilabels_plot) #make plotobj accessible
 
     # MARK: resolve node attributes influenced by ilabels
-    map!(x->PerNodeAttribute(x, automatic), :node_size, :node_size_m)
-    map!(gp.attributes, [:ilabels_plot_visible, :ilabels_plot, :ilabel_node_ids, :ilabels_fontsize_m, :node_size_m, :graph], :node_size_expanded) do ilabels_plot_visible, ilabels_plot, ilabel_node_ids, ilabels_fontsize, node_size, graph
-        if ilabels_plot_visible
+    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_size, :node_size_m)
+    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_plot, :ilabel_node_ids, :ilabels_fontsize_m, :node_size_m, :graph], :node_size_expanded) do ilabel_plot_visible, ilabels_plot, ilabel_node_ids, ilabels_fontsize, node_size, graph
+        if ilabel_plot_visible
             # find the computed node sizes for all nodes with ilabels
             overwritten_node_sizes = map(zip(ilabel_node_ids, Makie.fast_string_boundingboxes(ilabels_plot))) do (id, bb)
                 _ns = node_size[id]
@@ -316,9 +316,9 @@ function Makie.plot!(gp::GraphPlot)
     end
 
 
-    map!(x->PerNodeAttribute(x, automatic), :node_color, :node_color_m) 
-    map!(gp.attributes, [:ilabels_plot_visible, :node_color_m, :ilabel_node_id, :graph], :node_color_expanded) do ilabels_plot_visible, node_color, ilabel_node_ids, graph
-        if ilabels_plot_visible
+    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_color, :node_color_m) 
+    map!(gp.attributes, [:ilabel_plot_visible, :node_color_m, :ilabel_node_ids, :graph], :node_color_expanded) do ilabel_plot_visible, node_color, ilabel_node_ids, graph
+        if ilabel_plot_visible
             overwritten_node_colors = map(ilabel_node_ids) do id
                 _col = node_color[id]
                 id => _col == automatic ? :gray80 : _col
@@ -337,9 +337,9 @@ function Makie.plot!(gp::GraphPlot)
     end
 
 
-    map!(x->PerNodeAttribute(x, automatic), :node_marker, :node_marker_m) 
-    map!(gp.attributes, [:ilabels_plot_visible, :node_marker_m, :ilabel_node_id, :graph], :node_marker_expanded) do ilabels_plot_visible, node_marker, ilabel_node_ids, graph
-        if ilabels_plot_visible
+    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_marker, :node_marker_m) 
+    map!(gp.attributes, [:ilabel_plot_visible, :node_marker_m, :ilabel_node_ids, :graph], :node_marker_expanded) do ilabel_plot_visible, node_marker, ilabel_node_ids, graph
+        if ilabel_plot_visible
             overwritten_node_markers = map(ilabel_node_ids) do id
                 _mark = node_marker[id]
                 id => _mark == automatic ? Circle : _mark
@@ -357,9 +357,9 @@ function Makie.plot!(gp::GraphPlot)
         end
     end
 
-    map!(x->PerNodeAttribute(x, automatic), :node_strokewidth, :node_strokewidth_m) 
-    map!(gp.attributes, [:ilabels_plot_visible, :node_strokewidth_m, :ilabel_node_id, :graph], :node_marker_expanded) do ilabels_plot_visible, node_strokewidth, ilabel_node_ids, graph
-        if ilabels_plot_visible
+    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_strokewidth, :node_strokewidth_m) 
+    map!(gp.attributes, [:ilabel_plot_visible, :node_strokewidth_m, :ilabel_node_ids, :graph], :node_strokewidth_expanded) do ilabel_plot_visible, node_strokewidth, ilabel_node_ids, graph
+        if ilabel_plot_visible
             overwritten_node_strokewidths = map(ilabel_node_ids) do id
                 _sw = node_strokewidth[id]
                 id => _sw == automatic ? 1.0 : _sw
