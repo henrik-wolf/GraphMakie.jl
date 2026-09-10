@@ -616,37 +616,33 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
 
         tangents = getattr(tangents, i)
         tfactor = getattr(tfactor, i)
-        waypoints::Vector{PT} = getattr(waypoints, i, PT[])
+
         waypoints = let wps::Vector{PT} = getattr(waypoints, i, PT[]) 
-            if !isnothing(waypoints) && !isempty(waypoints) #remove p1 and p2 from waypoints if they are given
-                if waypoints[begin] == p1 || waypoints[end] == p2
+            if !isnothing(waypoints) && !isempty(waypoints) &&(waypoints[begin] == p1 || waypoints[end] == p2)
+                #remove p1 and p2 from waypoints if they are given
                     wps = copy(wps)
                     waypoints[begin] == p1 && popfirst!(waypoints)
                     waypoints[end] == p2 && pop!(waypoints)
-                else
-                    wps
-                end
-
             else
                 wps
             end
         end
 
-        cdu = getattr(attr.curve_distance_usage, i)
+        cdu = getattr(curve_distance_usage, i)
         if cdu === true
-            curve_distance = getattr(attr.curve_distance, i, 0.0)
+            curve_distance = getattr(curve_distance, i, 0.0)
         elseif cdu === false
             curve_distance = 0.0
         elseif cdu === automatic
             if is_directed(g) && has_edge(g, dst(e), src(e))
-                curve_distance = getattr(attr.curve_distance, i, 0.0)
+                curve_distance = getattr(curve_distance, i, 0.0)
             else
                 curve_distance = 0.0
             end
         end
 
         if !isnothing(waypoints) && !isempty(waypoints) #there are waypoints
-            radius = getattr(attr.waypoint_radius, i, nothing)
+            radius = getattr(waypoint_radius, i, nothing)
             if radius === nothing || radius === :spline
                 paths[i] = Path(p1, waypoints..., p2; tangents, tfactor)
             elseif radius isa Real
@@ -655,9 +651,9 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
                 throw(ArgumentError("Invalid radius $radius for edge $i!"))
             end
         elseif src(e) == dst(e) # selfedge
-            size = getattr(attr.selfedge_size, i)
-            direction = getattr(attr.selfedge_direction, i)
-            width = getattr(attr.selfedge_width, i)
+            size = getattr(selfedge_size, i)
+            direction = getattr(selfedge_direction, i)
+            width = getattr(selfedge_width, i)
             paths[i] = selfedge_path(g, pos, src(e), size, direction, width)
         elseif !isnothing(tangents)
             paths[i] = Path(p1, p2; tangents, tfactor)
