@@ -273,7 +273,7 @@ function Makie.plot!(gp::GraphPlot)
     map!(expand_vertex_attributes, gp.attributes, [:ilabels_color_m, :ilabel_node_ids], :ilabel_plot_color)
     map!(expand_vertex_attributes, gp.attributes, [:ilabels_fontsize_m, :ilabel_node_ids], :ilabel_plot_fontsize)
 
-    map!(!isempty, :ilabels_node_ids, :ilabel_plot_visible)
+    map!(!isempty, gp.attributes, :ilabel_node_ids, :ilabel_plot_visible)
     ilabels_plot = text!(gp, gp[:ilabel_plot_positions];
         text=gp[:ilabel_plot_texts],
         align=(:center, :center),
@@ -526,7 +526,7 @@ function Makie.plot!(gp::GraphPlot)
         [i for i in vertices(graph) if !isnothing(nlabels[i])]
     end
 
-    map!([:node_pos, :nlabels_offset_m, :nlabel_node_ids], :nlabel_plot_positions) do node_pos, offset, nodes
+    map!(gp.attributes, [:node_pos, :nlabels_offset_m, :nlabel_node_ids], :nlabel_plot_positions) do node_pos, offset, nodes
         map(nodes) do id
             _off = offset[id]
             if offset != nothing
@@ -551,7 +551,7 @@ function Makie.plot!(gp::GraphPlot)
     map!(expand_vertex_attributes, gp.attributes, [:nlabels_fontsize_m, :nlabel_node_ids], :nlabel_plot_fontsize)
     map!(expand_vertex_attributes, gp.attributes, [:nlabels_align_m, :nlabel_node_ids], :nlabel_plot_align)
 
-    map!(!isempty, :nlabels_node_ids, :nlabel_plot_visible)
+    map!(!isempty, gp.attributes, :nlabel_node_ids, :nlabel_plot_visible)
     nlabels_plot = text!(gp, gp[:nlabel_plot_positions];
         text=gp[:nlabel_plot_texts],
         align=gp[:nlabel_plot_align],
@@ -631,7 +631,7 @@ function Makie.plot!(gp::GraphPlot)
     map!(expand_edge_attributes, gp.attributes, [:elabels_color_m, :elabel_edge_ids], :elabel_plot_color)
     map!(expand_edge_attributes, gp.attributes, [:elabels_fontsize_m, :elabel_edge_ids], :elabel_plot_fontsize)
 
-    map!(!isempty, :elabels_edge_ids, :elabel_plot_visible)
+    map!(!isempty, gp.attributes, :elabel_edge_ids, :elabel_plot_visible)
     elabels_plot = text!(gp, gp[:elabel_plot_positions];
         text=gp[:elabel_plot_texts],
         rotation=gp[:elabel_plot_rotations],
