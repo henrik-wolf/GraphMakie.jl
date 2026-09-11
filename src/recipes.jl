@@ -413,12 +413,22 @@ function Makie.plot!(gp::GraphPlot)
         end
     end
 
-    
+    map!(gp.attributes, [:arrow_show_m, :graph], :arrow_edge_ids) do arrow_show, graph
+        [(i, e) for (i, e) in enumerate(edges(graph)) if arrow_show[i, e]]
+    end
 
-    # # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
+    map!(x -> PerNodeAttribute(x, graph_theme.node_outset), gp.attributes, :node_outset, :node_outset_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.edge_outset), gp.attributes, :edge_outset, :edge_outset_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.arrow_marker), gp.attributes, :arrow_marker, :arrow_marker_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.arrow_size), gp.attributes, :arrow_size, :arrow_size_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.arrow_shift), gp.attributes, :arrow_shift, :arrow_shift_m)
+    map!(x->PerEdgeAttribute(x, graph_theme.edge_color), gp.attributes, :edge_color, :edge_color_m)
+
+
+    # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
     map!(gp.attributes,
-         [:graph, :edge_paths, :node_pos, :to_px, :node_marker_expanded, :node_size_expanded, :node_outset, :edge_outset,
-          :arrow_marker, :arrow_shift, :arrow_size, :arrow_show_m],
+         [:graph, :edge_paths, :node_pos, :to_px, :node_marker_expanded, :node_size_expanded, :node_outset_m, :edge_outset_m,
+          :arrow_marker_m, :arrow_shift_m, :arrow_size_m, :arrow_show_m],
          :start_end_shifts
          ) do g, paths, node_pos, to_px, nmarker, nsize, noutset, eoutset, arrow_marker, arrow_shift, arrow_size,
               arrow_show
@@ -426,49 +436,19 @@ function Makie.plot!(gp::GraphPlot)
                                     arrow_shift, arrow_size, arrow_show)
     end
 
-    # # prepare arrow heads
-    map!(gp.attributes,
-         [:edge_paths, :start_end_shifts, :arrow_shift],
-         :arrow_shift_m) do edge_paths, start_end_shifts, arrow_shift
-        return find_arrow_shift(edge_paths, start_end_shifts, arrow_shift)
-    end
-
-    map!(gp.attributes, [:edge_paths, :arrow_shift_m, :node_pos],
-         :arrow_pos
-         ) do paths, arrow_shifts, np
-        if !isempty(paths)
-            map(paths, arrow_shifts) do path, shift
-                return interpolate(path, shift)
-            end
-        else # if no edges return (empty) vector of points, broadcast yields Vector{Any} which can't be plotted
-            Vector{eltype(np)}()
-        end
-    end
-
-    map!(gp.attributes,
-         [:edge_paths, :to_angle, :arrow_shift_m, :arrow_pos], :arrow_rot
-         ) do paths, to_angle, arrow_shifts, arrow_positions
-        if !isempty(paths)
-            angles = map(paths, arrow_shifts, arrow_positions) do path, shift, arrow_pos
-                return to_angle(path, arrow_pos, shift)
-            end
-            Billboard(angles)
-        else
-            Billboard(Float32[])
-        end
-    end
-
     # prepare edge plot attributes (makes them vectors of length ne(g) or single elements)
-    map!(gp.attributes, [:edge_color, :graph], :edgeplot_color) do color, graph
-        prep_edge_attributes(color, graph, graph_theme.edge_color)
+    map!(gp.attributes, [:edge_color_m, :graph], :edgeplot_color) do color, graph
+        expand_edge_attributes(color, graph)
     end
 
     map!(gp.attributes, [:edge_width, :graph], :edgeplot_linewidth) do width, graph
-        prep_edge_attributes(width, graph, graph_theme.edge_width)
+        width = PerEdgeAttribute(width, graph_theme.edge_width)
+        expand_edge_attributes(width, graph)
     end
 
     map!(gp.attributes, [:edge_linestyle, :graph], :edgeplot_linestyle) do style, graph
-        prep_edge_attributes(style, graph, graph_theme.edge_linestyle)
+        style = PerEdgeAttribute(style, graph_theme.edge_linestyle)
+        expand_edge_attributes(style, graph)
     end
 
     # actually plot edges
@@ -480,19 +460,52 @@ function Makie.plot!(gp::GraphPlot)
         gp.edge_attr[]...)
     add_constant!(gp.attributes, :edge_plot, edge_plot) #make plotobj accessible
 
-    # # prepare arrow plot attributes
-    map!(gp.attributes, [:arrow_marker, :graph], :arrowplot_marker) do marker, graph
-        prep_edge_attributes(marker, graph, graph_theme.arrow_marker)
+
+    # MARK: prepare arrow heads
+    map!(gp.attributes,
+         [:edge_paths, :start_end_shifts, :arrow_shift_m, :arrow_edge_ids],
+         :arrow_shift_expanded) do edge_paths, start_end_shifts, arrow_shift, arrow_edge_ids
+        return find_arrow_shift(edge_paths, start_end_shifts, arrow_shift, arrow_edge_ids)
     end
 
-    map!(gp.attributes, [:arrow_size, :graph], :arrowplot_markersize) do size, graph
-        prep_edge_attributes(size, graph, graph_theme.arrow_size)
+    map!(gp.attributes, [:edge_paths, :arrow_shift_expanded, :arrow_edge_ids, :node_pos],
+         :arrow_pos
+         ) do paths, arrow_shifts, arrow_edge_ids, np
+        if !isempty(arrow_edge_ids)
+            map(arrow_edge_ids, arrow_shifts) do (edge_id, _), shift
+                return interpolate(paths[edge_id], shift)
+            end
+        else # if no arrows return (empty) vector of points, broadcast yields Vector{Any} which can't be plotted
+            Vector{eltype(np)}()
+        end
     end
 
-    map!(gp.attributes, [:edge_color, :graph], :arrowplot_color) do color, graph
-        prep_edge_attributes(color, graph, graph_theme.edge_color)
+    map!(gp.attributes,
+         [:edge_paths, :to_angle, :arrow_shift_expanded, :arrow_pos, :arrow_edge_ids], :arrow_rot
+         ) do paths, to_angle, arrow_shifts, arrow_positions, arrow_edge_ids
+        if !isempty(arrow_edge_ids)
+            angles = map(arrow_edge_ids, arrow_shifts, arrow_positions) do (edge_id, _), shift, arrow_pos
+                return to_angle(paths[edge_id], arrow_pos, shift)
+            end
+            Billboard(angles)
+        else
+            Billboard(Float32[])
+        end
     end
 
+    map!(gp.attributes, [:arrow_marker_m, :arrow_edge_ids], :arrowplot_marker) do marker, arrow_edge_ids
+        expand_edge_attributes(marker, arrow_edge_ids)
+    end
+
+    map!(gp.attributes, [:arrow_size_m, :arrow_edge_ids], :arrowplot_markersize) do size, arrow_edge_ids
+        expand_edge_attributes(size, arrow_edge_ids)
+    end
+
+    map!(gp.attributes, [:edge_color_m, :arrow_edge_ids], :arrowplot_color) do color, arrow_edge_ids
+        expand_edge_attributes(color, arrow_edge_ids)
+    end
+
+    map!(!isempty, gp.attributes, :arrow_edge_ids, :arrowplot_visible)
     arrow_plot = scatter!(gp,
         gp[:arrow_pos];
         marker = gp[:arrowplot_marker],
@@ -501,12 +514,12 @@ function Makie.plot!(gp::GraphPlot)
         rotation = gp[:arrow_rot],
         strokewidth = 0.0,
         markerspace = :pixel,
-        visible = gp[:arrow_show_m],
+        visible = gp[:arrowplot_visible],
         # TODO: this drops reactivity for arrow attributes
         gp.arrow_attr[]...)
     add_constant!(gp.attributes, :arrow_plot, arrow_plot) #make plotobj accessible
 
-    # prepare node plot attributes
+    # MARK: prepare node plot attributes
     # TODO: could probably be merged into one computation with node_color_m, and the other ones as well...
     map!(gp.attributes, [:node_color_m, :graph], :nodeplot_color) do color, graph
         prep_vertex_attributes(color, graph, scene_theme.markercolor[])
@@ -717,7 +730,7 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
         tfactor_i = tfactor[i, e]
 
         waypoints_i = let wps = waypoints[i, e]
-            isnothing(wps) ? PT[] : PT.(wps)
+            wps = isnothing(wps) ? PT[] : PT.(wps)
             if !isempty(wps) &&(wps[begin] == p1 || wps[end] == p2)
                     #remove p1 and p2 from waypoints if they are given
                     wps[begin] == p1 && popfirst!(wps)
@@ -969,29 +982,30 @@ end
 Checks `arrow_shift` attr so that `arrow_shift = :end` gets transformed so that the arrowhead for that edge
 lands on the surface of the destination node.
 """
-function find_arrow_shift(edge_paths::Vector{<:AbstractPath{PT}}, start_end_shifts, arrow_shifts) where {PT}
-    arrow_shift = Vector{Float32}(undef, length(start_end_shifts))
+function find_arrow_shift(edge_paths::Vector{<:AbstractPath{PT}}, start_end_shifts, arrow_shifts, arrow_edge_ids) where {PT}
+    arrow_shift = Vector{Float32}(undef, length(arrow_edge_ids))
 
-    for (i, (_, end_shift)) in enumerate(start_end_shifts)
-        t = getattr(arrow_shifts, i, 0.5)
+    for (j, (i, e)) in enumerate(arrow_edge_ids)
+        _, end_shift = start_end_shifts[i]
+        t = arrow_shifts[i, e]
         if t === :end
             t = end_shift
         end
-        arrow_shift[i] = t
+        arrow_shift[j] = t
     end
 
     return arrow_shift
 end
 
-function find_arrow_shift(edge_paths::Vector{<:AbstractPath{<:Point3}}, start_end_shifts, arrow_shifts)
-    arrow_shift = Vector{Float32}(undef, length(start_end_shifts))
+function find_arrow_shift(edge_paths::Vector{<:AbstractPath{<:Point3}}, start_end_shifts, arrow_shifts, arrow_edge_ids)
+    arrow_shift = Vector{Float32}(undef, length(arrow_edge_ids))
 
-    for (i, e) in enumerate(start_end_shifts)
-        t = getattr(arrow_shifts, i, 0.5)
+    for (j, (i, e)) in enumerate(arrow_edge_ids)
+        t = arrow_shifts[i, e]
         if t === :end #not supported because to_px does not give pixels in 3D space (would need to map 3D coordinates to pixels...?)
             error("`arrow_shift = :end` not supported for 3D plots.")
         end
-        arrow_shift[i] = t
+        arrow_shift[j] = t
     end
 
     return arrow_shift
@@ -1003,13 +1017,14 @@ function find_start_end_shift(g, edge_paths::Vector{<:AbstractPath{<:Point3}}, n
                               arrow_show)
     shifts = Vector{Tuple{Float32,Float32}}(undef, ne(g))
     for (i, e) in enumerate(edges(g))
-        start_node_outset = getattr(node_outsets, src(e), 0.0)
-        end_node_outset = getattr(node_outsets, dst(e), 0.0)
+        start_node_outset = node_outsets[src(e)]
+        end_node_outset = node_outsets[dst(e)]
         !isnothing(start_node_outset) && start_node_outset != 0.0 && error("`node_outset != 0.0` not supported for 3D plots.")
         !isnothing(end_node_outset) && end_node_outset != 0.0 && error("`node_outset != 0.0` not supported for 3D plots.")
 
-        start_edge_outset = getattr(edge_outsets, i, (0.0, 0.0))[1]
-        end_edge_outset = getattr(edge_outsets, i, (0.0, 0.0))[2]
+        edge_outset = edge_outsets[i, e]
+        start_edge_outset = edge_outset[1]
+        end_edge_outset = edge_outset[2]
         (!isnothing(start_edge_outset) && start_edge_outset != 0.0) && error("`edge_outset != (0.0, 0.0)` not supported for 3D plots.")
         (!isnothing(end_edge_outset) && end_edge_outset != 0.0) && error("`edge_outset != (0.0, 0.0)` not supported for 3D plots.")
 
@@ -1027,16 +1042,17 @@ function find_start_end_shift(g, edge_paths::Vector{<:AbstractPath{PT}}, node_po
 
     for (i, e) in enumerate(edges(g))
         # find start shift
-        start_node_outset = getattr(node_outsets, src(e), nothing)
-        start_edge_outset = getattr(edge_outsets, i, (nothing, nothing))[1]
+        edge_outset = edge_outsets[i, e]
+        start_node_outset = node_outsets[src(e)]
+        start_edge_outset = edge_outset[1]
 
         start_outset = sum_if_not_nothing(start_node_outset, start_edge_outset)
 
         start_shift = if !isnothing(start_outset)
             j = src(e)
             p0 = getattr(node_pos, j)
-            node_marker = getattr(node_markers, j)
-            node_size = getattr(node_sizes, j)
+            node_marker = node_markers[j]
+            node_size = node_sizes[j]
             d = distance_between_markers(node_marker, node_size, Circle, 0) + start_outset
             p1 = point_near_offset(edge_paths[i], p0, -d, to_px, 0)
             inverse_interpolate(edge_paths[i], p1, 0.0)
@@ -1045,19 +1061,19 @@ function find_start_end_shift(g, edge_paths::Vector{<:AbstractPath{PT}}, node_po
         end
 
         # find end shift
-        t = getattr(arrow_shifts, i, 0.5)
-        end_node_outset = getattr(node_outsets, dst(e), nothing)
-        end_edge_outset = getattr(edge_outsets, i, (nothing, nothing))[2]
+        t = arrow_shifts[i, e]
+        end_node_outset = node_outsets[dst(e)]
+        end_edge_outset = edge_outset[2]
         end_outset = sum_if_not_nothing(end_node_outset, end_edge_outset)
         end_shift = if !isnothing(end_outset) || t === :end
             end_outset = isnothing(end_outset) ? 0.0 : end_outset
 
             j = dst(e)
             p0 = getattr(node_pos, j)
-            node_marker = getattr(node_markers, j)
-            node_size = getattr(node_sizes, j)
-            arrow_marker = getattr(arrow_markers, i)
-            arrow_size = arrow_show && t == :end ? getattr(arrow_sizes, i) : 0
+            node_marker = node_markers[j]
+            node_size = node_sizes[j]
+            arrow_marker = arrow_markers[i, e]
+            arrow_size = arrow_show[i, e] && t == :end ? arrow_sizes[i, e] : 0
             d = distance_between_markers(node_marker, node_size, arrow_marker, arrow_size) + end_outset
             p1 = point_near_offset(edge_paths[i], p0, d, to_px, 1)
             inverse_interpolate(edge_paths[i], p1, 1.0)
