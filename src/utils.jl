@@ -85,6 +85,10 @@ struct PerNodeAttribute{T,D}
     default::D
 end
 
+UnstablePerNodeAttribute(pna::PerNodeAttribute) = Ref{PerNodeAttribute}(pna)
+UnstablePerNodeAttribute(value) = UnstablePerNodeAttribute(PerNodeAttribute(value))
+UnstablePerNodeAttribute(value,default) = UnstablePerNodeAttribute(PerNodeAttribute(value, default))
+
 PerNodeAttribute(value) = PerNodeAttribute(value, nothing)
 
 is_scalar_nothing(attr) = issingleattribute(attr.value) && isnothing(attr.value)
@@ -146,6 +150,11 @@ function PerEdgeAttribute(value, default)
     E = per_edge_index_type(value)
     return PerEdgeAttribute{E, typeof(value), typeof(default)}(value, default)
 end
+
+UnstablePerEdgeAttribute(pea::PerEdgeAttribute) = Ref{PerEdgeAttribute}(pea)
+UnstablePerEdgeAttribute(value) = UnstablePerEdgeAttribute(PerEdgeAttribute(value))
+UnstablePerEdgeAttribute(value,default) = UnstablePerEdgeAttribute(PerEdgeAttribute(value,default))
+
 
 per_edge_index_type(value) = Int
 per_edge_index_type(value::AbstractVector) = Int

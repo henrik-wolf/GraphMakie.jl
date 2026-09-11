@@ -254,9 +254,9 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     # MARK: Set up data for ilabels plot
-    map!(x->PerNodeAttribute(x, graph_theme.ilabels), gp.attributes, :ilabels, :ilabels_m)
-    map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :ilabels_color, :ilabels_color_m)
-    map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :ilabels_fontsize, :ilabels_fontsize_m)
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.ilabels), gp.attributes, :ilabels, :ilabels_m)
+    map!(x->UnstablePerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :ilabels_color, :ilabels_color_m)
+    map!(x->UnstablePerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :ilabels_fontsize, :ilabels_fontsize_m)
 
     map!(gp.attributes, [:ilabels_m, :graph], :ilabel_node_ids) do ilabels, graph
         [i for i in vertices(graph) if !isnothing(ilabels[i])]
@@ -267,7 +267,8 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     map!(gp.attributes, [:ilabels_m, :ilabel_node_ids], :ilabel_plot_texts) do ilabels, nodes
-        [ilabels[i] for i in nodes] # text always needs to be a vector matching node pos
+        # TODO: with Makie 0.25 this no longer need to be a string.
+        [string(ilabels[i]) for i in nodes] # text always needs to be a vector matching node pos
     end
 
     map!(expand_vertex_attributes, gp.attributes, [:ilabels_color_m, :ilabel_node_ids], :ilabel_plot_color)
@@ -285,7 +286,7 @@ function Makie.plot!(gp::GraphPlot)
     add_constant!(gp.attributes, :ilabels_plot, ilabels_plot) #make plotobj accessible
 
     # MARK: resolve node attributes influenced by ilabels
-    map!(x->PerNodeAttribute(x, graph_theme.node_size), gp.attributes, :node_size, :node_size_m)
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.node_size), gp.attributes, :node_size, :node_size_m)
     map!(gp.attributes, [:ilabel_plot_visible, :ilabels_plot, :ilabel_node_ids, :ilabels_fontsize_m, :node_size_m, :graph], :node_size_expanded) do ilabel_plot_visible, ilabels_plot, ilabel_node_ids, ilabels_fontsize, node_size, graph
         if ilabel_plot_visible
             # find the computed node sizes for all nodes with ilabels
@@ -305,14 +306,14 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_sizes[v] = _ns
                 end
             end
-            PerNodeAttribute(overwritten_node_sizes, scene_theme.markersize[])
+            UnstablePerNodeAttribute(overwritten_node_sizes, scene_theme.markersize[])
         else
-            node_size.value === automatic ? PerNodeAttribute(scene_theme.markersize[]) : node_size  # assumes that users do not pass automatic per node.
+            node_size.value === automatic ? UnstablePerNodeAttribute(scene_theme.markersize[]) : UnstablePerNodeAttribute(node_size)  # assumes that users do not pass automatic per node.
         end
     end
 
 
-    map!(x->PerNodeAttribute(x, graph_theme.node_color), gp.attributes, :node_color, :node_color_m) 
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.node_color), gp.attributes, :node_color, :node_color_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_color_m, :ilabel_node_ids, :graph], :node_color_expanded) do ilabel_plot_visible, node_color, ilabel_node_ids, graph
         if ilabel_plot_visible
             overwritten_node_colors = map(ilabel_node_ids) do id
@@ -326,14 +327,14 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_colors[v] = _col
                 end
             end
-            PerNodeAttribute(overwritten_node_colors, scene_theme.markercolor[])
+            UnstablePerNodeAttribute(overwritten_node_colors, scene_theme.markercolor[])
         else
-            node_color.value == automatic ? PerNodeAttribute(scene_theme.markercolor[]) : node_color
+            node_color.value == automatic ? UnstablePerNodeAttribute(scene_theme.markercolor[]) : UnstablePerNodeAttribute(node_color)
         end
     end
 
 
-    map!(x->PerNodeAttribute(x, graph_theme.node_marker), gp.attributes, :node_marker, :node_marker_m) 
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.node_marker), gp.attributes, :node_marker, :node_marker_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_marker_m, :ilabel_node_ids, :graph], :node_marker_expanded) do ilabel_plot_visible, node_marker, ilabel_node_ids, graph
         if ilabel_plot_visible
             overwritten_node_markers = map(ilabel_node_ids) do id
@@ -347,13 +348,13 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_markers[v] = _mark
                 end
             end
-            PerNodeAttribute(overwritten_node_markers, scene_theme.marker[])
+            UnstablePerNodeAttribute(overwritten_node_markers, scene_theme.marker[])
         else
-            node_marker.value == automatic ? PerNodeAttribute(scene_theme.marker[]) : node_marker
+            node_marker.value == automatic ? UnstablePerNodeAttribute(scene_theme.marker[]) : UnstablePerNodeAttribute(node_marker)
         end
     end
 
-    map!(x->PerNodeAttribute(x, graph_theme.node_strokewidth), gp.attributes, :node_strokewidth, :node_strokewidth_m) 
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.node_strokewidth), gp.attributes, :node_strokewidth, :node_strokewidth_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_strokewidth_m, :ilabel_node_ids, :graph], :node_strokewidth_expanded) do ilabel_plot_visible, node_strokewidth, ilabel_node_ids, graph
         if ilabel_plot_visible
             overwritten_node_strokewidths = map(ilabel_node_ids) do id
@@ -367,9 +368,9 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_strokewidths[v] = _sw
                 end
             end
-            PerNodeAttribute(overwritten_node_strokewidths, scene_theme.markerstrokewidth[])
+            UnstablePerNodeAttribute(overwritten_node_strokewidths, scene_theme.markerstrokewidth[])
         else
-            node_strokewidth.value == automatic ? PerNodeAttribute(scene_theme.markerstrokewidth[]) : node_strokewidth
+            node_strokewidth.value == automatic ? UnstablePerNodeAttribute(scene_theme.markerstrokewidth[]) : UnstablePerNodeAttribute(node_strokewidth)
         end
     end
 
@@ -378,15 +379,15 @@ function Makie.plot!(gp::GraphPlot)
     # create array of paths triggered by node_pos changes
     # in case of a graph change the node_position will change anyway
 
-    map!(x -> PerEdgeAttribute(x, graph_theme.curve_distance_usage), gp.attributes, :curve_distance_usage, :curve_distance_usage_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.curve_distance), gp.attributes, :curve_distance, :curve_distance_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.selfedge_size), gp.attributes, :selfedge_size, :selfedge_size_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.selfedge_direction), gp.attributes, :selfedge_direction, :selfedge_direction_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.selfedge_width), gp.attributes, :selfedge_width, :selfedge_width_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.tangents), gp.attributes, :tangents, :tangents_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.tfactor), gp.attributes, :tfactor, :tfactor_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.waypoints), gp.attributes, :waypoints, :waypoints_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.waypoint_radius), gp.attributes, :waypoint_radius, :waypoint_radius_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.curve_distance_usage), gp.attributes, :curve_distance_usage, :curve_distance_usage_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.curve_distance), gp.attributes, :curve_distance, :curve_distance_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.selfedge_size), gp.attributes, :selfedge_size, :selfedge_size_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.selfedge_direction), gp.attributes, :selfedge_direction, :selfedge_direction_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.selfedge_width), gp.attributes, :selfedge_width, :selfedge_width_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.tangents), gp.attributes, :tangents, :tangents_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.tfactor), gp.attributes, :tfactor, :tfactor_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.waypoints), gp.attributes, :waypoints, :waypoints_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.waypoint_radius), gp.attributes, :waypoint_radius, :waypoint_radius_m)
 
     map!(
         gp.attributes, [
@@ -401,21 +402,21 @@ function Makie.plot!(gp::GraphPlot)
 
     map!(gp.attributes, [:arrow_show, :graph], :arrow_show_m) do arrow_show, g
         if arrow_show === automatic
-            PerEdgeAttribute(Graphs.is_directed(g))
+            UnstablePerEdgeAttribute(Graphs.is_directed(g))
         else
-            PerEdgeAttribute(arrow_show, Graphs.is_directed(g))
+            UnstablePerEdgeAttribute(arrow_show, Graphs.is_directed(g))
         end
     end
 
 
-    map!(x -> PerNodeAttribute(x, graph_theme.node_outset), gp.attributes, :node_outset, :node_outset_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.edge_outset), gp.attributes, :edge_outset, :edge_outset_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.arrow_marker), gp.attributes, :arrow_marker, :arrow_marker_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.arrow_size), gp.attributes, :arrow_size, :arrow_size_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.arrow_shift), gp.attributes, :arrow_shift, :arrow_shift_m)
-    map!(x->PerEdgeAttribute(x, graph_theme.edge_color), gp.attributes, :edge_color, :edge_color_m)
-    map!(x->PerEdgeAttribute(x, graph_theme.edge_width), gp.attributes, :edge_width, :edge_width_m)
-    map!(x->PerEdgeAttribute(x, graph_theme.edge_linestyle), gp.attributes, :edge_linestyle, :edge_linestyle_m)
+    map!(x -> UnstablePerNodeAttribute(x, graph_theme.node_outset), gp.attributes, :node_outset, :node_outset_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.edge_outset), gp.attributes, :edge_outset, :edge_outset_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.arrow_marker), gp.attributes, :arrow_marker, :arrow_marker_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.arrow_size), gp.attributes, :arrow_size, :arrow_size_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.arrow_shift), gp.attributes, :arrow_shift, :arrow_shift_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.edge_color), gp.attributes, :edge_color, :edge_color_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.edge_width), gp.attributes, :edge_width, :edge_width_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.edge_linestyle), gp.attributes, :edge_linestyle, :edge_linestyle_m)
 
 
     # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
@@ -514,13 +515,13 @@ function Makie.plot!(gp::GraphPlot)
     add_constant!(gp.attributes, :node_plot, vertex_plot) #make plotobj accessible
 
     # MARK: node labels
-    map!(x->PerNodeAttribute(x, graph_theme.nlabels), gp.attributes, :nlabels, :nlabels_m)
-    map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :nlabels_color, :nlabels_color_m)
-    map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :nlabels_fontsize, :nlabels_fontsize_m)
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.nlabels), gp.attributes, :nlabels, :nlabels_m)
+    map!(x->UnstablePerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :nlabels_color, :nlabels_color_m)
+    map!(x->UnstablePerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :nlabels_fontsize, :nlabels_fontsize_m)
     # TODO: default should be zero in correct dimensions, if nothing...
-    map!(x->PerNodeAttribute(x, graph_theme.nlabels_offset), gp.attributes, :nlabels_offset, :nlabels_offset_m)
-    map!(x->PerNodeAttribute(x, graph_theme.nlabels_align), gp.attributes, :nlabels_align, :nlabels_align_m)
-    map!(x->PerNodeAttribute(x, graph_theme.nlabels_distance), gp.attributes, :nlabels_distance, :nlabels_distance_m)
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.nlabels_offset), gp.attributes, :nlabels_offset, :nlabels_offset_m)
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.nlabels_align), gp.attributes, :nlabels_align, :nlabels_align_m)
+    map!(x->UnstablePerNodeAttribute(x, graph_theme.nlabels_distance), gp.attributes, :nlabels_distance, :nlabels_distance_m)
 
     map!(gp.attributes, [:nlabels_m, :graph], :nlabel_node_ids) do nlabels, graph
         [i for i in vertices(graph) if !isnothing(nlabels[i])]
@@ -544,7 +545,8 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     map!(gp.attributes, [:nlabels_m, :nlabel_node_ids], :nlabel_plot_texts) do nlabels, nodes
-        [nlabels[i] for i in nodes]
+        # TODO: with Makie 0.25 this no longer need to be a string.
+        [string(nlabels[i]) for i in nodes]
     end
 
     map!(expand_vertex_attributes, gp.attributes, [:nlabels_color_m, :nlabel_node_ids], :nlabel_plot_color)
@@ -567,22 +569,23 @@ function Makie.plot!(gp::GraphPlot)
     circshift!(gp.plots, -1)
 
     # MARK: edge labels
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels), gp.attributes, :elabels, :elabels_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_shift), gp.attributes, :elabels_shift, :elabels_shift_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_offset), gp.attributes, :elabels_offset, :elabels_offset_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_rotation), gp.attributes, :elabels_rotation, :elabels_rotation_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_distance), gp.attributes, :elabels_distance, :elabels_distance_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_side), gp.attributes, :elabels_side, :elabels_side_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_color), gp.attributes, :elabels_color, :elabels_color_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_fontsize), gp.attributes, :elabels_fontsize, :elabels_fontsize_m)
-    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_align), gp.attributes, :elabels_align, :elabels_align_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels), gp.attributes, :elabels, :elabels_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_shift), gp.attributes, :elabels_shift, :elabels_shift_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_offset), gp.attributes, :elabels_offset, :elabels_offset_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_rotation), gp.attributes, :elabels_rotation, :elabels_rotation_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_distance), gp.attributes, :elabels_distance, :elabels_distance_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_side), gp.attributes, :elabels_side, :elabels_side_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_color), gp.attributes, :elabels_color, :elabels_color_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_fontsize), gp.attributes, :elabels_fontsize, :elabels_fontsize_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.elabels_align), gp.attributes, :elabels_align, :elabels_align_m)
 
     map!(gp.attributes, [:elabels_m, :graph], :elabel_edge_ids) do elabels, graph
         [(i, e) for (i, e) in enumerate(edges(graph)) if !isnothing(elabels[i, e])]
     end
 
     map!(gp.attributes, [:elabels_m, :elabel_edge_ids], :elabel_plot_texts) do elabels, elabel_edge_ids
-        [elabels[i, e] for (i,e) in elabel_edge_ids] # text always needs to be a vector matching edge pos
+        # TODO: with Makie 0.25 this no longer need to be a string.
+        [string(elabels[i, e]) for (i,e) in elabel_edge_ids] # text always needs to be a vector matching edge pos
     end
 
     # positions: center point between nodes + offset + distance*normal + shift*edge direction
@@ -603,9 +606,9 @@ function Makie.plot!(gp::GraphPlot)
                 valrot
             else
                 rot = to_angle(paths[i], pos[j], shift[i, e])
-                if valrot === automatic && (rot > π/2 || rot < - π/2)
+                if valrot === automatic
                     # point the labels up
-                    rot + π
+                    (rot > π/2 || rot < - π/2) ? rot + π : rot
                 elseif isnothing(valrot)
                     rot
                 else
@@ -619,7 +622,7 @@ function Makie.plot!(gp::GraphPlot)
     map!(gp.attributes, [:elabel_plot_positions, :to_px, :elabels_distance_m, :elabels_side_m, :edge_paths, :elabels_shift_m, :elabels_fontsize_m, :edge_width_m, :elabel_edge_ids], :elabel_plot_offsets) do pos, to_px, dist, side, paths, shift, fontsize, edge_width, elabel_edge_ids
         map(enumerate(elabel_edge_ids)) do (j,(i,e))
             p0 = pos[j]
-            p1 = p0 + tangent(path[i], shift[i,e])
+            p1 = p0 + tangent(paths[i], shift[i,e])
             tangent_px = to_px(p1) - to_px(p0)
 
             offset_direction = Point(-tangent_px.data[2], tangent_px.data[1])/norm(tangent_px)
