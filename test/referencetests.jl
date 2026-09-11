@@ -122,7 +122,7 @@ end
 
         # equal = ReferenceTests.psnr_equality()(load(old), load(new))
         score = compare(load(old), load(new))
-        MEH =  40
+        MEH =  44
         GOOD = 60
 
         # basicially disable check on older julia versions
