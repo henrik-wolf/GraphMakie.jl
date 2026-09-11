@@ -132,6 +132,8 @@ end
     arrow_size = @inherit markersize
     "Shift arrow position from source (0) to dest (1) node. If `arrow_shift=:end`, the arrowhead will be placed on the surface of the destination node (assuming the destination node is circular)."  # TODO: remove the circular stipulation once we can do non-circular markers
     arrow_shift=0.5
+    "Orientation of edge for arrow head. Either `:forward` or `:reverse`, defines at which end of the Edge `:end` is."
+    arrow_orientation=:forward
     "List of kw arguments which gets passed to the `scatter` command."
     arrow_attr=(;)
     # node label attributes (Text)
@@ -396,6 +398,7 @@ function Makie.plot!(gp::GraphPlot)
     map!(x -> UnstablePerEdgeAttribute(x, graph_theme.tfactor), gp.attributes, :tfactor, :tfactor_m)
     map!(x -> UnstablePerEdgeAttribute(x, graph_theme.waypoints), gp.attributes, :waypoints, :waypoints_m)
     map!(x -> UnstablePerEdgeAttribute(x, graph_theme.waypoint_radius), gp.attributes, :waypoint_radius, :waypoint_radius_m)
+    map!(x -> UnstablePerEdgeAttribute(x, graph_theme.arrow_orientation), gp.attributes, :arrow_orientation, :arrow_orientation_m)
 
     map!(
         gp.attributes, [
@@ -430,12 +433,12 @@ function Makie.plot!(gp::GraphPlot)
     # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
     map!(gp.attributes,
          [:graph, :edge_paths, :node_pos, :to_px, :node_marker_expanded, :node_size_expanded, :node_outset_m, :edge_outset_m,
-          :arrow_marker_m, :arrow_shift_m, :arrow_size_m, :arrow_show_m],
+          :arrow_marker_m, :arrow_shift_m, :arrow_size_m, :arrow_orientation_m, :arrow_show_m],
          :start_end_shifts
          ) do g, paths, node_pos, to_px, nmarker, nsize, noutset, eoutset, arrow_marker, arrow_shift, arrow_size,
-              arrow_show
+              arrow_orientation, arrow_show
         return find_start_end_shift(g, paths, node_pos, to_px, nmarker, nsize, noutset, eoutset, arrow_marker,
-                                    arrow_shift, arrow_size, arrow_show)
+                                    arrow_shift, arrow_size, arrow_orientation, arrow_show)
     end
 
     # prepare edge plot attributes (makes them vectors of length ne(g) or single elements)
@@ -459,9 +462,9 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     map!(gp.attributes,
-         [:edge_paths, :start_end_shifts, :arrow_shift_m, :arrow_edge_ids],
-         :arrow_shift_expanded) do edge_paths, start_end_shifts, arrow_shift, arrow_edge_ids
-        return find_arrow_shift(edge_paths, start_end_shifts, arrow_shift, arrow_edge_ids)
+         [:edge_paths, :start_end_shifts, :arrow_shift_m, :arrow_orientation_m, :arrow_edge_ids],
+         :arrow_shift_expanded) do edge_paths, start_end_shifts, arrow_shift, arrow_orientation, arrow_edge_ids
+        return find_arrow_shift(edge_paths, start_end_shifts, arrow_shift, arrow_orientation, arrow_edge_ids)
     end
 
     map!(gp.attributes, [:edge_paths, :arrow_shift_expanded, :arrow_edge_ids, :node_pos],
@@ -477,11 +480,16 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     map!(gp.attributes,
-         [:edge_paths, :to_angle, :arrow_shift_expanded, :arrow_pos, :arrow_edge_ids], :arrow_rot
-         ) do paths, to_angle, arrow_shifts, arrow_positions, arrow_edge_ids
+         [:edge_paths, :to_angle, :arrow_shift_expanded, :arrow_pos, :arrow_orientation_m, :arrow_edge_ids], :arrow_rot
+         ) do paths, to_angle, arrow_shifts, arrow_positions, arrow_orientations, arrow_edge_ids
         if !isempty(arrow_edge_ids)
-            angles = map(arrow_edge_ids, arrow_shifts, arrow_positions) do (edge_id, _), shift, arrow_pos
-                return to_angle(paths[edge_id], arrow_pos, shift)
+            angles = map(arrow_edge_ids, arrow_shifts, arrow_positions) do (i, e), shift, arrow_pos
+                angle = to_angle(paths[i], arrow_pos, shift)
+                if arrow_orientations[i,e] === :reverse
+                    angle + π
+                else
+                    angle
+                end
             end
             Billboard(angles)
         else
@@ -958,22 +966,27 @@ end
 Checks `arrow_shift` attr so that `arrow_shift = :end` gets transformed so that the arrowhead for that edge
 lands on the surface of the destination node.
 """
-function find_arrow_shift(edge_paths::Vector{<:AbstractPath{PT}}, start_end_shifts, arrow_shifts, arrow_edge_ids) where {PT}
+function find_arrow_shift(edge_paths::Vector{<:AbstractPath{PT}}, start_end_shifts, arrow_shifts, arrow_orientations, arrow_edge_ids) where {PT}
     arrow_shift = Vector{Float32}(undef, length(arrow_edge_ids))
 
     for (j, (i, e)) in enumerate(arrow_edge_ids)
-        _, end_shift = start_end_shifts[i]
+        arrow_orientation = arrow_orientations[i, e]
+
+        edge_shifts = start_end_shifts[i]
         t = arrow_shifts[i, e]
-        if t === :end
-            t = end_shift
+        arrow_shift[j] = if arrow_orientation === :forward
+            t === :end ? edge_shifts[2] : t
+        elseif arrow_orientation === :reverse
+            t === :end ? edge_shifts[1] : 1-t
+        else
+            throw(ArgumentError("Invalid arrow orientation $arrow_orientation for edge $e (id: $i)!"))
         end
-        arrow_shift[j] = t
     end
 
     return arrow_shift
 end
 
-function find_arrow_shift(edge_paths::Vector{<:AbstractPath{<:Point3}}, start_end_shifts, arrow_shifts, arrow_edge_ids)
+function find_arrow_shift(edge_paths::Vector{<:AbstractPath{<:Point3}}, start_end_shifts, arrow_shifts, arrow_orientations, arrow_edge_ids)
     arrow_shift = Vector{Float32}(undef, length(arrow_edge_ids))
 
     for (j, (i, e)) in enumerate(arrow_edge_ids)
@@ -990,7 +1003,7 @@ end
 function find_start_end_shift(g, edge_paths::Vector{<:AbstractPath{<:Point3}}, node_pos, to_px,
                               node_markers,
                               node_sizes, node_outsets, edge_outsets, arrow_markers, arrow_shifts, arrow_sizes,
-                              arrow_show)
+                              arrow_orientation, arrow_show)
     shifts = Vector{Tuple{Float32,Float32}}(undef, ne(g))
     for (i, e) in enumerate(edges(g))
         start_node_outset = node_outsets[src(e)]
@@ -1013,23 +1026,33 @@ sum_if_not_nothing(a, b) = isnothing(a) ? b : isnothing(b) ? a : a + b
 
 function find_start_end_shift(g, edge_paths::Vector{<:AbstractPath{PT}}, node_pos, to_px, node_markers,
                               node_sizes, node_outsets, edge_outsets, arrow_markers, arrow_shifts, arrow_sizes,
-                              arrow_show) where {PT}
+                              arrow_orientations, arrow_show) where {PT}
     shifts = Vector{Tuple{Float32,Float32}}(undef, ne(g))
 
     for (i, e) in enumerate(edges(g))
         # find start shift
         edge_outset = edge_outsets[i, e]
+
+        t = arrow_shifts[i, e]
+        arrow_orientation = arrow_orientations[i, e]
+        if !(arrow_orientation in (:forward, :reverse))
+            throw(ArgumentError("Invalid arrow orientation $arrow_orientation for edge $e (id: $i)!"))
+        end
+
         start_node_outset = node_outsets[src(e)]
         start_edge_outset = edge_outset[1]
-
         start_outset = sum_if_not_nothing(start_node_outset, start_edge_outset)
 
-        start_shift = if !isnothing(start_outset)
+        start_shift = if !isnothing(start_outset) || (t === :end && arrow_orientation === :reverse)
+            start_outset = isnothing(start_outset) ? 0.0 : start_outset
+
             j = src(e)
-            p0 = getattr(node_pos, j)
+            p0 = node_pos[j]
             node_marker = node_markers[j]
             node_size = node_sizes[j]
-            d = distance_between_markers(node_marker, node_size, Circle, 0) + start_outset
+            arrow_marker = arrow_markers[i, e]
+            arrow_size = arrow_show[i, e] && t == :end && arrow_orientation === :reverse ? arrow_sizes[i, e] : 0
+            d = distance_between_markers(node_marker, node_size, arrow_marker, arrow_size) + start_outset
             p1 = point_near_offset(edge_paths[i], p0, -d, to_px, 0)
             inverse_interpolate(edge_paths[i], p1, 0.0)
         else
@@ -1037,19 +1060,19 @@ function find_start_end_shift(g, edge_paths::Vector{<:AbstractPath{PT}}, node_po
         end
 
         # find end shift
-        t = arrow_shifts[i, e]
         end_node_outset = node_outsets[dst(e)]
         end_edge_outset = edge_outset[2]
         end_outset = sum_if_not_nothing(end_node_outset, end_edge_outset)
-        end_shift = if !isnothing(end_outset) || t === :end
+
+        end_shift = if !isnothing(end_outset) || (t === :end && arrow_orientation == :forward)
             end_outset = isnothing(end_outset) ? 0.0 : end_outset
 
             j = dst(e)
-            p0 = getattr(node_pos, j)
+            p0 = node_pos[j]
             node_marker = node_markers[j]
             node_size = node_sizes[j]
             arrow_marker = arrow_markers[i, e]
-            arrow_size = arrow_show[i, e] && t == :end ? arrow_sizes[i, e] : 0
+            arrow_size = arrow_show[i, e] && t == :end && arrow_orientation === :forward ? arrow_sizes[i, e] : 0
             d = distance_between_markers(node_marker, node_size, arrow_marker, arrow_size) + end_outset
             p1 = point_near_offset(edge_paths[i], p0, d, to_px, 1)
             inverse_interpolate(edge_paths[i], p1, 1.0)
