@@ -288,7 +288,7 @@ function Makie.plot!(gp::GraphPlot)
     # MARK: resolve node attributes influenced by ilabels
     map!(x->UnstablePerNodeAttribute(x, graph_theme.node_size), gp.attributes, :node_size, :node_size_m)
     map!(gp.attributes, [:ilabel_plot_visible, :ilabels_plot, :ilabel_node_ids, :ilabels_fontsize_m, :node_size_m, :graph], :node_size_expanded) do ilabel_plot_visible, ilabels_plot, ilabel_node_ids, ilabels_fontsize, node_size, graph
-        if ilabel_plot_visible
+        node_size_value = if ilabel_plot_visible
             # find the computed node sizes for all nodes with ilabels
             overwritten_node_sizes = map(zip(ilabel_node_ids, Makie.fast_string_boundingboxes(ilabels_plot))) do (id, bb)
                 _ns = node_size[id]
@@ -306,16 +306,18 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_sizes[v] = _ns
                 end
             end
-            UnstablePerNodeAttribute(overwritten_node_sizes, scene_theme.markersize[])
+            overwritten_node_sizes
         else
-            node_size.value === automatic ? UnstablePerNodeAttribute(scene_theme.markersize[]) : UnstablePerNodeAttribute(node_size)  # assumes that users do not pass automatic per node.
+            node_size.value === automatic ? scene_theme.markersize[] : node_size.value
         end
+
+        UnstablePerNodeAttribute(node_size_value, scene_theme.markersize[])
     end
 
 
     map!(x->UnstablePerNodeAttribute(x, graph_theme.node_color), gp.attributes, :node_color, :node_color_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_color_m, :ilabel_node_ids, :graph], :node_color_expanded) do ilabel_plot_visible, node_color, ilabel_node_ids, graph
-        if ilabel_plot_visible
+        node_color_value = if ilabel_plot_visible
             overwritten_node_colors = map(ilabel_node_ids) do id
                 _col = node_color[id]
                 id => _col == automatic ? :gray80 : _col
@@ -327,19 +329,21 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_colors[v] = _col
                 end
             end
-            UnstablePerNodeAttribute(overwritten_node_colors, scene_theme.markercolor[])
+            overwritten_node_colors
         else
-            node_color.value == automatic ? UnstablePerNodeAttribute(scene_theme.markercolor[]) : UnstablePerNodeAttribute(node_color)
+            node_color.value === automatic ? scene_theme.markercolor[] : node_color.value
         end
+
+        UnstablePerNodeAttribute(node_color_value, scene_theme.markercolor[])
     end
 
 
     map!(x->UnstablePerNodeAttribute(x, graph_theme.node_marker), gp.attributes, :node_marker, :node_marker_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_marker_m, :ilabel_node_ids, :graph], :node_marker_expanded) do ilabel_plot_visible, node_marker, ilabel_node_ids, graph
-        if ilabel_plot_visible
+        node_marker_value = if ilabel_plot_visible
             overwritten_node_markers = map(ilabel_node_ids) do id
                 _mark = node_marker[id]
-                id => _mark == automatic ? Circle : _mark
+                id => _mark === automatic ? Circle : _mark
             end |> Dict
 
             for v in vertices(graph)
@@ -348,18 +352,20 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_markers[v] = _mark
                 end
             end
-            UnstablePerNodeAttribute(overwritten_node_markers, scene_theme.marker[])
+            overwritten_node_markers
         else
-            node_marker.value == automatic ? UnstablePerNodeAttribute(scene_theme.marker[]) : UnstablePerNodeAttribute(node_marker)
+            node_marker.value === automatic ? scene_theme.marker[] : node_marker.value
         end
+
+        UnstablePerNodeAttribute(node_marker_value, scene_theme.marker[])
     end
 
     map!(x->UnstablePerNodeAttribute(x, graph_theme.node_strokewidth), gp.attributes, :node_strokewidth, :node_strokewidth_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_strokewidth_m, :ilabel_node_ids, :graph], :node_strokewidth_expanded) do ilabel_plot_visible, node_strokewidth, ilabel_node_ids, graph
-        if ilabel_plot_visible
+        node_strokewidth_value = if ilabel_plot_visible
             overwritten_node_strokewidths = map(ilabel_node_ids) do id
                 _sw = node_strokewidth[id]
-                id => _sw == automatic ? 1.0 : _sw
+                id => _sw === automatic ? 1.0 : _sw
             end |> Dict
 
             for v in vertices(graph)
@@ -368,10 +374,12 @@ function Makie.plot!(gp::GraphPlot)
                     overwritten_node_strokewidths[v] = _sw
                 end
             end
-            UnstablePerNodeAttribute(overwritten_node_strokewidths, scene_theme.markerstrokewidth[])
+            overwritten_node_strokewidths
         else
-            node_strokewidth.value == automatic ? UnstablePerNodeAttribute(scene_theme.markerstrokewidth[]) : UnstablePerNodeAttribute(node_strokewidth)
+            node_strokewidth.value === automatic ? scene_theme.markerstrokewidth[] : node_strokewidth.value
         end
+
+        UnstablePerNodeAttribute(node_strokewidth_value, scene_theme.markerstrokewidth[])
     end
 
     # MARK: edges

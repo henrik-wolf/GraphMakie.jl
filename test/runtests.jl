@@ -189,15 +189,20 @@ end
     @test get_edge_plot(p) isa EdgePlot
     @test get_node_plot(p)[1][] == p[:node_pos][]
     @test get_arrow_plot(p).visible[] == false
-    @test get_nlabel_plot(p) === nothing
-    @test get_elabel_plot(p) === nothing
+    @test get_nlabel_plot(p)[:text][] == []
+    @test get_nlabel_plot(p)[:visible][] == false
+
+    @test get_elabel_plot(p)[:text][] == []
+    @test get_elabel_plot(p)[:visible][] == false
 
     fig, ax, p = graphplot(g; nlabels)
     @test get_nlabel_plot(p)[:text][] == nlabels
-    @test get_elabel_plot(p) === nothing
+    @test get_elabel_plot(p)[:text][] == []
+    @test get_elabel_plot(p)[:visible][] == false
 
     fig, ax, p = graphplot(g; elabels)
-    @test get_nlabel_plot(p) === nothing
+    @test get_nlabel_plot(p)[:text][] == []
+    @test get_nlabel_plot(p)[:visible][] == false
     @test get_elabel_plot(p)[:text][] == elabels
 
     fig, ax, p = graphplot(g; elabels, nlabels)
