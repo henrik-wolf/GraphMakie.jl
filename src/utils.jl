@@ -1,5 +1,5 @@
 export get_edge_plot, get_arrow_plot, get_node_plot, get_nlabel_plot, get_elabel_plot
-export PerNodeAttribute, nodes_with_values
+export PerNodeAttribute, PerEdgeAttribute, nodes_with_values
 
 "Get the `EdgePlot` subplot from a `GraphPlot`."
 get_edge_plot(gp::GraphPlot) = gp.edge_plot[]
@@ -115,7 +115,6 @@ function _per_node_getindex(value, node, default)
         return get(value, node, default)
     else
         return value
-        # return value === nothing ? default : value
     end
 end
 
@@ -125,6 +124,61 @@ end
 Return the vertices whose attribute value is not `nothing`.
 """
 nodes_with_values(attr::PerNodeAttribute, graph::AbstractGraph) = filter(i->attr[i] !== nothing, vertices(graph))
+
+
+"""
+    PerEdgeAttribute(value, default=nothing)
+
+Wrap an edge attribute so it can be accessed uniformly by edge id or edge key.
+
+The first type parameter stores the supported index type:
+- `Int` for scalars, vectors, and dicts indexed by edge id
+- the concrete edge key type for dicts indexed by `AbstractEdge`
+"""
+struct PerEdgeAttribute{E,T,D}
+    value::T
+    default::D
+end
+
+PerEdgeAttribute(value) = PerEdgeAttribute(value, nothing)
+
+function PerEdgeAttribute(value, default)
+    E = per_edge_index_type(value)
+    return PerEdgeAttribute{E, typeof(value), typeof(default)}(value, default)
+end
+
+per_edge_index_type(value) = Int
+per_edge_index_type(value::AbstractVector) = Int
+per_edge_index_type(value::AbstractDict) = per_edge_index_type(keytype(value))
+
+per_edge_index_type(::Type{K}) where {K<:Integer} = Int
+per_edge_index_type(::Type{K}) where {K<:AbstractEdge} = K
+function per_edge_index_type(::Type{K}) where {K}
+    throw(ArgumentError("PerEdgeAttribute dict keys must be edge ids or AbstractEdge values, got $K."))
+end
+
+Base.getindex(attr::PerEdgeAttribute{Int}, edge_id::Integer) =
+    _per_edge_getindex(attr.value, edge_id, attr.default)
+
+Base.getindex(attr::PerEdgeAttribute{Int}, edge_id::Integer, edge::AbstractEdge) = attr[edge_id]
+
+Base.getindex(attr::PerEdgeAttribute{<:AbstractEdge}, edge_id::Integer, edge::AbstractEdge) =
+    _per_edge_getindex(attr.value, edge, attr.default)
+
+function _per_edge_getindex(value, index, default)
+    if value isa AbstractVector && !isa(value, Point)
+        return value[index]
+    elseif value isa DefaultDict || value isa DefaultOrderedDict
+        return value[index]
+    elseif value isa AbstractDict
+        return get(value, index, default)
+    else
+        return value
+    end
+end
+
+
+
 
 """
     prep_vertex_attributes(attr, graph::AbstractGraph, default_value)

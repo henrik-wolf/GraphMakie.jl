@@ -215,6 +215,8 @@ function Makie.plot!(gp::GraphPlot)
     scene_theme = theme(gp)
     graph_theme = default_theme(gp, GraphPlot)
 
+    # TODO: check that there are no non-scalar values set as default values...
+
     # create initial vertex positions, will be updated on changes to graph or layout
     # make node_position-Observable available as named attribute from the outside
     default_layout = Spring()
@@ -252,7 +254,7 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     # MARK: Set up data for ilabels plot
-    map!(PerNodeAttribute, gp.attributes, :ilabels, :ilabels_m)
+    map!(x->PerNodeAttribute(x, graph_theme.ilabels), gp.attributes, :ilabels, :ilabels_m)
     map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :ilabels_color, :ilabels_color_m)
     map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :ilabels_fontsize, :ilabels_fontsize_m)
 
@@ -289,7 +291,7 @@ function Makie.plot!(gp::GraphPlot)
     add_constant!(gp.attributes, :ilabels_plot, ilabels_plot) #make plotobj accessible
 
     # MARK: resolve node attributes influenced by ilabels
-    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_size, :node_size_m)
+    map!(x->PerNodeAttribute(x, graph_theme.node_size), gp.attributes, :node_size, :node_size_m)
     map!(gp.attributes, [:ilabel_plot_visible, :ilabels_plot, :ilabel_node_ids, :ilabels_fontsize_m, :node_size_m, :graph], :node_size_expanded) do ilabel_plot_visible, ilabels_plot, ilabel_node_ids, ilabels_fontsize, node_size, graph
         if ilabel_plot_visible
             # find the computed node sizes for all nodes with ilabels
@@ -316,7 +318,7 @@ function Makie.plot!(gp::GraphPlot)
     end
 
 
-    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_color, :node_color_m) 
+    map!(x->PerNodeAttribute(x, graph_theme.node_color), gp.attributes, :node_color, :node_color_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_color_m, :ilabel_node_ids, :graph], :node_color_expanded) do ilabel_plot_visible, node_color, ilabel_node_ids, graph
         if ilabel_plot_visible
             overwritten_node_colors = map(ilabel_node_ids) do id
@@ -337,7 +339,7 @@ function Makie.plot!(gp::GraphPlot)
     end
 
 
-    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_marker, :node_marker_m) 
+    map!(x->PerNodeAttribute(x, graph_theme.node_marker), gp.attributes, :node_marker, :node_marker_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_marker_m, :ilabel_node_ids, :graph], :node_marker_expanded) do ilabel_plot_visible, node_marker, ilabel_node_ids, graph
         if ilabel_plot_visible
             overwritten_node_markers = map(ilabel_node_ids) do id
@@ -357,7 +359,7 @@ function Makie.plot!(gp::GraphPlot)
         end
     end
 
-    map!(x->PerNodeAttribute(x, automatic), gp.attributes, :node_strokewidth, :node_strokewidth_m) 
+    map!(x->PerNodeAttribute(x, graph_theme.node_strokewidth), gp.attributes, :node_strokewidth, :node_strokewidth_m) 
     map!(gp.attributes, [:ilabel_plot_visible, :node_strokewidth_m, :ilabel_node_ids, :graph], :node_strokewidth_expanded) do ilabel_plot_visible, node_strokewidth, ilabel_node_ids, graph
         if ilabel_plot_visible
             overwritten_node_strokewidths = map(ilabel_node_ids) do id
@@ -381,23 +383,41 @@ function Makie.plot!(gp::GraphPlot)
     # compute initial edge paths; will be adjusted later if arrow_shift = :end
     # create array of paths triggered by node_pos changes
     # in case of a graph change the node_position will change anyway
+
+    map!(x -> PerEdgeAttribute(x, graph_theme.curve_distance_usage), gp.attributes, :curve_distance_usage, :curve_distance_usage_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.curve_distance), gp.attributes, :curve_distance, :curve_distance_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.selfedge_size), gp.attributes, :selfedge_size, :selfedge_size_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.selfedge_direction), gp.attributes, :selfedge_direction, :selfedge_direction_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.selfedge_width), gp.attributes, :selfedge_width, :selfedge_width_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.tangents), gp.attributes, :tangents, :tangents_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.tfactor), gp.attributes, :tfactor, :tfactor_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.waypoints), gp.attributes, :waypoints, :waypoints_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.waypoint_radius), gp.attributes, :waypoint_radius, :waypoint_radius_m)
+
     map!(
         gp.attributes, [
-            :graph, :node_pos, :force_straight_edges, :curve_distance_usage, :curve_distance,
-            :selfedge_size, :selfedge_direction, :selfedge_width,
-            :tangents, :tfactor, :waypoints, :waypoint_radius,
+            :graph, :node_pos, :force_straight_edges, :curve_distance_usage_m, :curve_distance_m,
+            :selfedge_size_m, :selfedge_direction_m, :selfedge_width_m,
+            :tangents_m, :tfactor_m, :waypoints_m, :waypoint_radius_m,
         ], :edge_paths
     ) do graph, node_pos, args...
+        # returns vector of paths
         find_edge_paths(graph, node_pos, args...)
     end
 
     map!(gp.attributes, [:arrow_show, :graph], :arrow_show_m) do arrow_show, g
-        return arrow_show === automatic ? Graphs.is_directed(g) : arrow_show
+        if arrow_show === automatic
+            PerEdgeAttribute(Graphs.is_directed(g))
+        else
+            PerEdgeAttribute(arrow_show, Graphs.is_directed(g))
+        end
     end
+
+    
 
     # # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
     map!(gp.attributes,
-         [:graph, :edge_paths, :node_pos, :to_px, :node_marker_m, :node_size_m, :node_outset, :edge_outset,
+         [:graph, :edge_paths, :node_pos, :to_px, :node_marker_expanded, :node_size_expanded, :node_outset, :edge_outset,
           :arrow_marker, :arrow_shift, :arrow_size, :arrow_show_m],
          :start_end_shifts
          ) do g, paths, node_pos, to_px, nmarker, nsize, noutset, eoutset, arrow_marker, arrow_shift, arrow_size,
@@ -693,14 +713,13 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
     for (i, e) in enumerate(edges(g))
         p1, p2 = node_pos[src(e)], node_pos[dst(e)]
 
-        tangents_i = getattr(tangents, i)
-        tfactor_i = getattr(tfactor, i)
+        tangents_i = tangents[i, e]
+        tfactor_i = tfactor[i, e]
 
-
-        waypoints_i = let wps::Vector{PT} = getattr(waypoints, i, PT[]) 
-            if !isnothing(wps) && !isempty(wps) &&(wps[begin] == p1 || wps[end] == p2)
+        waypoints_i = let wps = waypoints[i, e]
+            isnothing(wps) ? PT[] : PT.(wps)
+            if !isempty(wps) &&(wps[begin] == p1 || wps[end] == p2)
                     #remove p1 and p2 from waypoints if they are given
-                    wps = copy(wps)
                     wps[begin] == p1 && popfirst!(wps)
                     wps[end] == p2 && pop!(wps)
                     wps
@@ -709,40 +728,41 @@ function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, 
             end
         end
 
-        cdu = getattr(curve_distance_usage, i)
-        curve_distance_i = 0.0
-        if cdu === true
-            curve_distance_i = getattr(curve_distance, i, 0.0)
+        cdu = curve_distance_usage[i, e]
+        curve_distance_i = if cdu === true
+            curve_distance[i, e]
         elseif cdu === false
-            curve_distance_i = 0.0
+            0.0
         elseif cdu === automatic
             if is_directed(g) && has_edge(g, dst(e), src(e))
-                curve_distance_i = getattr(curve_distance, i, 0.0)
+                curve_distance[i, e]
             else
-                curve_distance_i = 0.0
+                0.0
             end
+        else
+            0.0
         end
 
-        if !isnothing(waypoints_i) && !isempty(waypoints_i) #there are waypoints
-            radius = getattr(waypoint_radius, i, nothing)
+        paths[i] = if !isempty(waypoints_i) #there are waypoints
+            radius = waypoint_radius[i, e]
             if radius === nothing || radius === :spline
-                paths[i] = Path(p1, waypoints_i..., p2; tangents=tangents_i, tfactor=tfactor_i)
+                Path(p1, waypoints_i..., p2; tangents=tangents_i, tfactor=tfactor_i)
             elseif radius isa Real
-                paths[i] = Path(radius, p1, waypoints_i..., p2)
+                Path(radius, p1, waypoints_i..., p2)
             else
-                throw(ArgumentError("Invalid radius $radius for edge $i!"))
+                throw(ArgumentError("Invalid radius $radius for edge $e (id: $i)!"))
             end
         elseif src(e) == dst(e) # selfedge
-            size = getattr(selfedge_size, i)
-            direction = getattr(selfedge_direction, i)
-            width = getattr(selfedge_width, i)
-            paths[i] = selfedge_path(g, node_pos, src(e), size, direction, width)
+            size = selfedge_size[i, e]
+            direction = selfedge_direction[i, e]
+            width = selfedge_width[i, e]
+            selfedge_path(g, node_pos, src(e), size, direction, width)
         elseif !isnothing(tangents_i)
-            paths[i] = Path(p1, p2; tangents=tangents_i, tfactor=tfactor_i)
+            Path(p1, p2; tangents=tangents_i, tfactor=tfactor_i)
         elseif PT <: Point2 && !iszero(curve_distance_i)
-            paths[i] = curved_path(p1, p2, curve_distance_i)
+            curved_path(p1, p2, curve_distance_i)
         else # straight line
-            paths[i] = Path(p1, p2)
+            Path(p1, p2)
         end
     end
 
