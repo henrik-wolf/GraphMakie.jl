@@ -258,30 +258,24 @@ function Makie.plot!(gp::GraphPlot)
     map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :ilabels_color, :ilabels_color_m)
     map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :ilabels_fontsize, :ilabels_fontsize_m)
 
-    map!(!is_scalar_nothing, gp.attributes, :ilabels_m, :ilabel_plot_visible)
-
-    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_m, :graph], :ilabel_node_ids) do visible, ilabels, graph
-       visible ? nodes_with_values(ilabels, graph) : Int[]
+    map!(gp.attributes, [:ilabels_m, :graph], :ilabel_node_ids) do ilabels, graph
+        [i for i in vertices(graph) if !isnothing(ilabels[i])]
     end
 
-    map!(gp.attributes, [:ilabel_plot_visible, :node_pos, :ilabel_node_ids], :ilabel_plot_positions) do visible, node_pos, nodes
-        visible ? [node_pos[i] for i in nodes] : Point2f[]
+    map!(gp.attributes, [:node_pos, :ilabel_node_ids], :ilabel_plot_positions) do node_pos, nodes
+        node_pos[nodes]
     end
 
-    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_m, :ilabel_node_ids], :ilabel_plot_text) do visible, ilabels, nodes
-        visible ? [ilabels[i] for i in nodes] : []
+    map!(gp.attributes, [:ilabels_m, :ilabel_node_ids], :ilabel_plot_texts) do ilabels, nodes
+        [ilabels[i] for i in nodes] # text always needs to be a vector matching node pos
     end
 
-    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_color_m, :ilabel_node_ids], :ilabel_plot_color) do visible, color, nodes
-        visible ? color[nodes] : color.default
-    end
+    map!(expand_vertex_attributes, gp.attributes, [:ilabels_color_m, :ilabel_node_ids], :ilabel_plot_color)
+    map!(expand_vertex_attributes, gp.attributes, [:ilabels_fontsize_m, :ilabel_node_ids], :ilabel_plot_fontsize)
 
-    map!(gp.attributes, [:ilabel_plot_visible, :ilabels_fontsize_m, :ilabel_node_ids], :ilabel_plot_fontsize) do visible, fontsize, nodes
-        visible ? fontsize[nodes] : fontsize.default
-    end
-
+    map!(!isempty, :ilabels_node_ids, :ilabel_plot_visible)
     ilabels_plot = text!(gp, gp[:ilabel_plot_positions];
-        text=gp[:ilabel_plot_text],
+        text=gp[:ilabel_plot_texts],
         align=(:center, :center),
         color=gp[:ilabel_plot_color],
         fontsize=gp[:ilabel_plot_fontsize],
@@ -413,9 +407,6 @@ function Makie.plot!(gp::GraphPlot)
         end
     end
 
-    map!(gp.attributes, [:arrow_show_m, :graph], :arrow_edge_ids) do arrow_show, graph
-        [(i, e) for (i, e) in enumerate(edges(graph)) if arrow_show[i, e]]
-    end
 
     map!(x -> PerNodeAttribute(x, graph_theme.node_outset), gp.attributes, :node_outset, :node_outset_m)
     map!(x -> PerEdgeAttribute(x, graph_theme.edge_outset), gp.attributes, :edge_outset, :edge_outset_m)
@@ -423,6 +414,8 @@ function Makie.plot!(gp::GraphPlot)
     map!(x -> PerEdgeAttribute(x, graph_theme.arrow_size), gp.attributes, :arrow_size, :arrow_size_m)
     map!(x -> PerEdgeAttribute(x, graph_theme.arrow_shift), gp.attributes, :arrow_shift, :arrow_shift_m)
     map!(x->PerEdgeAttribute(x, graph_theme.edge_color), gp.attributes, :edge_color, :edge_color_m)
+    map!(x->PerEdgeAttribute(x, graph_theme.edge_width), gp.attributes, :edge_width, :edge_width_m)
+    map!(x->PerEdgeAttribute(x, graph_theme.edge_linestyle), gp.attributes, :edge_linestyle, :edge_linestyle_m)
 
 
     # find shifts along edge path that intersect with node marker, including arrow size, short circuits when no shifting is required
@@ -437,19 +430,9 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     # prepare edge plot attributes (makes them vectors of length ne(g) or single elements)
-    map!(gp.attributes, [:edge_color_m, :graph], :edgeplot_color) do color, graph
-        expand_edge_attributes(color, graph)
-    end
-
-    map!(gp.attributes, [:edge_width, :graph], :edgeplot_linewidth) do width, graph
-        width = PerEdgeAttribute(width, graph_theme.edge_width)
-        expand_edge_attributes(width, graph)
-    end
-
-    map!(gp.attributes, [:edge_linestyle, :graph], :edgeplot_linestyle) do style, graph
-        style = PerEdgeAttribute(style, graph_theme.edge_linestyle)
-        expand_edge_attributes(style, graph)
-    end
+    map!(expand_edge_attributes, gp.attributes, [:edge_color_m, :graph], :edgeplot_color)
+    map!(expand_vertex_attributes, gp.attributes, [:edge_width_m, :graph], :edgeplot_linewidth)
+    map!(expand_vertex_attributes, gp.attributes, [:edge_linestyle_m, :graph], :edgeplot_linestyle)
 
     # actually plot edges
     edge_plot = edgeplot!(gp, gp[:edge_paths], gp[:start_end_shifts];
@@ -462,6 +445,10 @@ function Makie.plot!(gp::GraphPlot)
 
 
     # MARK: prepare arrow heads
+    map!(gp.attributes, [:arrow_show_m, :graph], :arrow_edge_ids) do arrow_show, graph
+        [(i, e) for (i, e) in enumerate(edges(graph)) if arrow_show[i, e]]
+    end
+
     map!(gp.attributes,
          [:edge_paths, :start_end_shifts, :arrow_shift_m, :arrow_edge_ids],
          :arrow_shift_expanded) do edge_paths, start_end_shifts, arrow_shift, arrow_edge_ids
@@ -493,17 +480,9 @@ function Makie.plot!(gp::GraphPlot)
         end
     end
 
-    map!(gp.attributes, [:arrow_marker_m, :arrow_edge_ids], :arrowplot_marker) do marker, arrow_edge_ids
-        expand_edge_attributes(marker, arrow_edge_ids)
-    end
-
-    map!(gp.attributes, [:arrow_size_m, :arrow_edge_ids], :arrowplot_markersize) do size, arrow_edge_ids
-        expand_edge_attributes(size, arrow_edge_ids)
-    end
-
-    map!(gp.attributes, [:edge_color_m, :arrow_edge_ids], :arrowplot_color) do color, arrow_edge_ids
-        expand_edge_attributes(color, arrow_edge_ids)
-    end
+    map!(expand_edge_attributes, gp.attributes, [:arrow_marker_m, :arrow_edge_ids], :arrowplot_marker)
+    map!(expand_edge_attributes, gp.attributes, [:arrow_size_m, :arrow_edge_ids], :arrowplot_markersize)
+    map!(expand_edge_attributes, gp.attributes, [:edge_color_m, :arrow_edge_ids], :arrowplot_color)
 
     map!(!isempty, gp.attributes, :arrow_edge_ids, :arrowplot_visible)
     arrow_plot = scatter!(gp,
@@ -520,22 +499,10 @@ function Makie.plot!(gp::GraphPlot)
     add_constant!(gp.attributes, :arrow_plot, arrow_plot) #make plotobj accessible
 
     # MARK: prepare node plot attributes
-    # TODO: could probably be merged into one computation with node_color_m, and the other ones as well...
-    map!(gp.attributes, [:node_color_m, :graph], :nodeplot_color) do color, graph
-        prep_vertex_attributes(color, graph, scene_theme.markercolor[])
-    end
-
-    map!(gp.attributes, [:node_marker_m, :graph], :nodeplot_marker) do marker, graph
-        prep_vertex_attributes(marker, graph, scene_theme.marker[])
-    end
-
-    map!(gp.attributes, [:node_strokewidth_m, :graph], :nodeplot_strokewidth) do width, graph
-        prep_vertex_attributes(width, graph, scene_theme.markerstrokewidth[])
-    end
-
-    map!(gp.attributes, [:node_size_m, :graph], :nodeplot_markersize) do size, graph
-        prep_vertex_attributes(size, graph, scene_theme.markersize[])
-    end
+    map!(expand_vertex_attributes, gp.attributes, [:node_color_m, :graph], :nodeplot_color)
+    map!(expand_vertex_attributes, gp.attributes, [:node_marker_m, :graph], :nodeplot_marker)
+    map!(expand_vertex_attributes, gp.attributes, [:node_strokewidth_m, :graph], :nodeplot_strokewidth)
+    map!(expand_vertex_attributes, gp.attributes, [:node_size_m, :graph], :nodeplot_markersize)
 
     vertex_plot = scatter!(gp, gp[:node_pos];
         color=gp[:nodeplot_color],
@@ -546,172 +513,170 @@ function Makie.plot!(gp::GraphPlot)
         gp[:node_attr][]...)
     add_constant!(gp.attributes, :node_plot, vertex_plot) #make plotobj accessible
 
-    # plot node labels
-    # TODO: this makes reactive swapping of nlabels impossible
-    if gp.nlabels[] !== nothing
-        map!(gp.attributes, [:node_pos, :nlabels_offset], :nlabels_positions) do np, offset
-            if offset != nothing
-                np .+ offset
-            else
-                copy(np)
-            end
-        end
+    # MARK: node labels
+    map!(x->PerNodeAttribute(x, graph_theme.nlabels), gp.attributes, :nlabels, :nlabels_m)
+    map!(x->PerNodeAttribute(x, scene_theme.textcolor[]), gp.attributes, :nlabels_color, :nlabels_color_m)
+    map!(x->PerNodeAttribute(x, scene_theme.fontsize[]), gp.attributes, :nlabels_fontsize, :nlabels_fontsize_m)
+    # TODO: default should be zero in correct dimensions, if nothing...
+    map!(x->PerNodeAttribute(x, graph_theme.nlabels_offset), gp.attributes, :nlabels_offset, :nlabels_offset_m)
+    map!(x->PerNodeAttribute(x, graph_theme.nlabels_align), gp.attributes, :nlabels_align, :nlabels_align_m)
+    map!(x->PerNodeAttribute(x, graph_theme.nlabels_distance), gp.attributes, :nlabels_distance, :nlabels_distance_m)
 
-        map!(gp.attributes, [:nlabels_align, :nlabels_distance], :nlabels_offset_processed) do align, distance
-            # TODO: this probably does not work with a dict, where many other things seem to do?
-            if align isa Vector
-                distance .* align_to_dir.(align)
-            else
-                distance .* align_to_dir(align)
-            end
-        end
-
-        # prepare node labels attributes
-        map!(gp.attributes, [:nlabels, :graph], :nlabels_text_processed) do labels, graph
-            prep_vertex_attributes(labels, graph, "")
-        end
-
-        map!(gp.attributes, [:nlabels_align, :graph], :nlabels_align_processed) do align, graph
-            prep_vertex_attributes(align, graph, graph_theme.nlabels_align)
-        end
-
-        map!(gp.attributes, [:nlabels_color, :graph], :nlabels_color_processed) do color, graph
-            prep_vertex_attributes(color, graph, graph_theme.nlabels_color)
-        end
-
-        map!(gp.attributes, [:nlabels_fontsize, :graph], :nlabels_fontsize_processed) do fontsize, graph
-            prep_vertex_attributes(fontsize, graph, graph_theme.nlabels_fontsize)
-        end
-
-        nlabels_plot = text!(gp, gp[:nlabels_positions];
-            text=gp[:nlabels_text_processed],
-            align=gp[:nlabels_align_processed],
-            color=gp[:nlabels_color_processed],
-            offset=gp[:nlabels_offset_processed],
-            fontsize=gp[:nlabels_fontsize_processed],
-            # TODO: this drops reactivity for node label attributes
-            gp.nlabels_attr[]...)
-        add_constant!(gp.attributes, :nlabels_plot, nlabels_plot) #make plotobj accessible
+    map!(gp.attributes, [:nlabels_m, :graph], :nlabel_node_ids) do nlabels, graph
+        [i for i in vertices(graph) if !isnothing(nlabels[i])]
     end
+
+    map!([:node_pos, :nlabels_offset_m, :nlabel_node_ids], :nlabel_plot_positions) do node_pos, offset, nodes
+        map(nodes) do id
+            _off = offset[id]
+            if offset != nothing
+                node_pos[id] + _off
+            else
+                node_pos[id]
+            end
+        end
+    end
+
+    map!(gp.attributes, [:nlabels_align_m, :nlabels_distance_m, :nlabel_node_ids], :nlabel_plot_offsets) do align, distance, nodes
+        map(nodes) do id
+            distance[id] * align_to_dir(align[id])
+        end
+    end
+
+    map!(gp.attributes, [:nlabels_m, :nlabel_node_ids], :nlabel_plot_texts) do nlabels, nodes
+        [nlabels[i] for i in nodes]
+    end
+
+    map!(expand_vertex_attributes, gp.attributes, [:nlabels_color_m, :nlabel_node_ids], :nlabel_plot_color)
+    map!(expand_vertex_attributes, gp.attributes, [:nlabels_fontsize_m, :nlabel_node_ids], :nlabel_plot_fontsize)
+    map!(expand_vertex_attributes, gp.attributes, [:nlabels_align_m, :nlabel_node_ids], :nlabel_plot_align)
+
+    map!(!isempty, :nlabels_node_ids, :nlabel_plot_visible)
+    nlabels_plot = text!(gp, gp[:nlabel_plot_positions];
+        text=gp[:nlabel_plot_texts],
+        align=gp[:nlabel_plot_align],
+        color=gp[:nlabel_plot_color],
+        offset=gp[:nlabel_plot_offsets],
+        fontsize=gp[:nlabel_plot_fontsize],
+        visible=gp[:nlabel_plot_visible],
+        # TODO: this drops reactivity for node label attributes
+        gp.nlabels_attr[]...)
+    add_constant!(gp.attributes, :nlabels_plot, nlabels_plot) #make plotobj accessible
 
     # shuffle ilabels to back of list for them to be plotted on top
-    if haskey(gp, :ilabels_plot)
-        if gp.plots[1] === gp[:ilabels_plot][]
-            circshift!(gp.plots, -1)
+    circshift!(gp.plots, -1)
+
+    # MARK: edge labels
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels), gp.attributes, :elabels, :elabels_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_shift), gp.attributes, :elabels_shift, :elabels_shift_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_offset), gp.attributes, :elabels_offset, :elabels_offset_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_rotation), gp.attributes, :elabels_rotation, :elabels_rotation_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_distance), gp.attributes, :elabels_distance, :elabels_distance_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_side), gp.attributes, :elabels_side, :elabels_side_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_color), gp.attributes, :elabels_color, :elabels_color_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_fontsize), gp.attributes, :elabels_fontsize, :elabels_fontsize_m)
+    map!(x -> PerEdgeAttribute(x, graph_theme.elabels_align), gp.attributes, :elabels_align, :elabels_align_m)
+
+    map!(gp.attributes, [:elabels_m, :graph], :elabel_edge_ids) do elabels, graph
+        [(i, e) for (i, e) in enumerate(edges(graph)) if !isnothing(elabels[i, e])]
+    end
+
+    map!(gp.attributes, [:elabels_m, :elabel_edge_ids], :elabel_plot_texts) do elabels, elabel_edge_ids
+        [elabels[i, e] for (i,e) in elabel_edge_ids] # text always needs to be a vector matching edge pos
+    end
+
+    # positions: center point between nodes + offset + distance*normal + shift*edge direction
+    map!(gp.attributes, [:edge_paths, :elabels_shift_m, :elabels_offset_m, :elabel_edge_ids], :elabel_plot_positions) do paths, shift, eloffset, elabel_edge_ids
+        map(elabel_edge_ids) do (i, e)
+            p1 = interpolate(paths[i], shift[i,e])
+            el_off = eloffset[i,e]
+            isnothing(el_off) ? p1 : p1 + el_off
         end
     end
 
-    # plot edge labels
-    # TODO: this makes reactive swapping of edge labels impossible
-    if gp.elabels[] !== nothing
-        # positions: center point between nodes + offset + distance*normal + shift*edge direction
-        map!(gp.attributes, [:edge_paths, :elabels_shift, :elabels_offset], :elabels_positions) do paths, shift, eloffset
-            pos = broadcast(interpolate, paths, shift)
-
-            if eloffset !== nothing
-                pos .= pos .+ eloffset
-            end
-            pos
-        end
-
-        # rotations based on the edge_vec_px and opposite argument
-        map!(gp.attributes, [:elabels_rotation, :to_angle, :elabels_positions, :edge_paths, :elabels_shift, :graph], :elabels_rotation_computed) do elabrots, to_angle, pos, paths, shift, g
-            rot = broadcast(to_angle, paths, pos, shift)
-            for i in 1:ne(g)
-                valrot = getattr(elabrots, i, nothing)
-                if valrot isa Real
-                    # fix rotation to a single angle
-                    rot[i] = valrot
-                elseif valrot === automatic
+    # rotations based on the edge_vec_px and opposite argument
+    map!(gp.attributes, [:elabels_rotation_m, :to_angle, :elabel_plot_positions, :edge_paths, :elabels_shift_m, :elabel_edge_ids], :elabel_plot_rotations) do elabrots, to_angle, pos, paths, shift, elabel_edge_ids
+        map(enumerate(elabel_edge_ids)) do (j,(i,e))
+            valrot = elabrots[i, e]
+            if valrot isa Real
+                # fix rotation to a single angle
+                valrot
+            else
+                rot = to_angle(paths[i], pos[j], shift[i, e])
+                if valrot === automatic && (rot > π/2 || rot < - π/2)
                     # point the labels up
-                    if (rot[i] > π/2 || rot[i] < - π/2)
-                        rot[i] += π
-                    end
+                    rot + π
+                elseif isnothing(valrot)
+                    rot
+                else
+                    throw(ArgumentError("Invalid elabel rotation $valrot for edge $e (id: $i)!"))
                 end
             end
-            return rot
         end
-
-        # calculate the offset in pixels in normal direction to the edge
-        map!(gp.attributes, [:elabels_positions, :to_px, :elabels_distance, :elabels_side, :edge_paths, :elabels_shift, :graph, :elabels_fontsize, :edge_width], :elabels_offsets) do pos, to_px, dist, side, paths, shift, g, fontsize, edge_width
-            tangent_px = broadcast(paths, pos, shift) do path, p0, t
-                p1 = p0 + tangent(path, t)
-                to_px(p1) - to_px(p0)
-            end
-
-            offsets = map(p -> Point(-p.data[2], p.data[1])/norm(p), tangent_px)
-            offsets .= elabels_distance_offset(g, gp.attributes) .* offsets
-        end
-
-        # prepare edge labels attributes
-        map!(gp.attributes, [:elabels, :graph], :elabels_text_processed) do labels, graph
-            prep_edge_attributes(labels, graph, "")
-        end
-
-        map!(gp.attributes, [:elabels_align, :graph], :elabels_align_processed) do align, graph
-            prep_edge_attributes(align, graph, graph_theme.elabels_align)
-        end
-
-        map!(gp.attributes, [:elabels_color, :graph], :elabels_color_processed) do color, graph
-            prep_edge_attributes(color, graph, graph_theme.elabels_color)
-        end
-
-        map!(gp.attributes, [:elabels_fontsize, :graph], :elabels_fontsize_processed) do fontsize, graph
-            prep_edge_attributes(fontsize, graph, graph_theme.elabels_fontsize)
-        end
-
-        elabels_plot = text!(gp, gp[:elabels_positions];
-            text=gp[:elabels_text_processed],
-            rotation=gp[:elabels_rotation_computed],
-            offset=gp[:elabels_offsets],
-            align=gp[:elabels_align_processed],
-            color=gp[:elabels_color_processed],
-            fontsize=gp[:elabels_fontsize_processed],
-            # TODO: this drops reactivity for edge label attributes
-            gp.elabels_attr[]...)
-        add_constant!(gp.attributes, :elabels_plot, elabels_plot) #make plotobj accessible
     end
+
+    # calculate the offset in pixels in normal direction to the edge
+    map!(gp.attributes, [:elabel_plot_positions, :to_px, :elabels_distance_m, :elabels_side_m, :edge_paths, :elabels_shift_m, :elabels_fontsize_m, :edge_width_m, :elabel_edge_ids], :elabel_plot_offsets) do pos, to_px, dist, side, paths, shift, fontsize, edge_width, elabel_edge_ids
+        map(enumerate(elabel_edge_ids)) do (j,(i,e))
+            p0 = pos[j]
+            p1 = p0 + tangent(path[i], shift[i,e])
+            tangent_px = to_px(p1) - to_px(p0)
+
+            offset_direction = Point(-tangent_px.data[2], tangent_px.data[1])/norm(tangent_px)
+            elabel_distance_offset(dist[i,e], side[i,e], fontsize[i,e], edge_width[i,e], i, e) * offset_direction
+        end
+    end
+
+    map!(expand_edge_attributes, gp.attributes, [:elabels_align_m, :elabel_edge_ids], :elabel_plot_align)
+    map!(expand_edge_attributes, gp.attributes, [:elabels_color_m, :elabel_edge_ids], :elabel_plot_color)
+    map!(expand_edge_attributes, gp.attributes, [:elabels_fontsize_m, :elabel_edge_ids], :elabel_plot_fontsize)
+
+    map!(!isempty, :elabels_edge_ids, :elabel_plot_visible)
+    elabels_plot = text!(gp, gp[:elabel_plot_positions];
+        text=gp[:elabel_plot_texts],
+        rotation=gp[:elabel_plot_rotations],
+        offset=gp[:elabel_plot_offsets],
+        align=gp[:elabel_plot_align],
+        color=gp[:elabel_plot_color],
+        fontsize=gp[:elabel_plot_fontsize],
+        visible=gp[:elabel_plot_visible],
+        # TODO: this drops reactivity for edge label attributes
+        gp.elabels_attr[]...)
+    add_constant!(gp.attributes, :elabels_plot, elabels_plot) #make plotobj accessible
 
     return gp
 end
 
 """
-    elabels_distance_offset(g, attrs)
+    elabel_distance_offset(elabel_distance, elabel_side, elabel_fontsize, edge_width, i, e)
 
-Returns the elabels_distance taking into consideration elabels_side
+Returns the elabel_distance taking into consideration elabel_side
 """
-function elabels_distance_offset(g, attrs)
-    offs = zeros(ne(g))
-    for i in 1:ne(g)
-        attrval = getattr(attrs.elabels_distance, i, automatic)
-        attrvalside = getattr(attrs.elabels_side, i, :left)
-        if attrval isa Real
-            if attrvalside == :left
-                offs[i] = attrval
-            elseif attrvalside == :right
-                offs[i] = -attrval
-            elseif attrvalside == :center
-                offs[i] = zero(attrval)
-            end
-        elseif attrval === automatic
-            offval = (getattr(attrs.elabels_fontsize, i) + getattr(attrs.edge_width, i))/2
-            if attrvalside == :left
-                offs[i] = offval
-            elseif attrvalside == :right
-                offs[i] = -offval
-            elseif attrvalside == :center
-                offs[i] = zero(offval)
-            end
-        end
+function elabel_distance_offset(elabel_distance, elabel_side, elabel_fontsize, edge_width, i, e)
+    distance = if elabel_distance isa Real
+        elabel_distance
+    elseif elabel_distance === automatic
+        (elabel_fontsize + edge_width)/2
+    else
+        throw(ArgumentError("Invalid elabel distance $elabel_distance for edge $e (id: $i)!"))
     end
-    return offs
+
+    if elabel_side == :left
+        distance
+    elseif elabel_side == :right
+        -distance
+    elseif elabel_side == :center
+        zero(distance)
+    else
+        throw(ArgumentError("Invalid elabel side $elabel_side for edge $e (id: $i)!"))
+    end
 end
 
 """
     find_edge_paths(g, attr, pos::AbstractVector{PT}) where {PT}
 
 Returns an `AbstractPath` for each edge in the graph. Returns a vector of
-paths. If `attr.force_straight_edges` is `true`, the paths will be just plain lines
+paths. If `force_straight_edges` is `true`, the paths will be just plain lines
 """
 function find_edge_paths(g, node_pos::AbstractVector{PT}, force_straight_edges, curve_distance_usage, curve_distance, selfedge_size, selfedge_direction, selfedge_width, tangents, tfactor, waypoints, waypoint_radius) where {PT}
     # for straight_lines: return vector of Line rather than vector of AbstractPath

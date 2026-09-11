@@ -187,30 +187,46 @@ Prepare the vertex attributes to be forwarded to the internal recipes.
 If the attribute is a `Vector` or single value forward it as is (or the `default_value` if isnothing).
 If it is an `AbstractDict` expand it to a `Vector` using vertex indices.
 """
-function prep_vertex_attributes(attr, graph::AbstractGraph, default_value=nothing)
-    if issingleattribute(attr)
-        isnothing(attr) ? default_value : attr
-    elseif attr isa AbstractVector
-        attr
+function expand_vertex_attributes(attr, graph::AbstractGraph)
+    if issingleattribute(attr.value)
+        isnothing(attr.value) ? attr.default : attr.value
+    elseif attr.value isa AbstractVector
+        attr.value
     else
-        [getattr(attr, i, default_value) for i in vertices(graph)]
+        [attr[i] for i in vertices(graph)]
+    end
+end
+
+function expand_vertex_attributes(attr, vertex_ids)
+    if issingleattribute(attr.value)
+        isnothing(attr.value) ? attr.default : attr.value
+    else
+        [attr[i] for i in vertex_ids]
     end
 end
 
 """
-    prep_edge_attributes(attr, graph::AbstractGraph, default_value)
+    expand_edge_attributes(attr::PerEdgeAttribute, graph::AbstractGraph)
 
-Prepare the edge attributes to be forwarded to the internal recipes.
+Expands the edge attribute to be forwarded to the internal recipes.
 If the attribute is a `Vector` or single value forward it as is (or the `default_value` if isnothing).
 If it is an `AbstractDict` expand it to a `Vector` using edge indices.
 """
-function prep_edge_attributes(attr, graph::AbstractGraph, default_value=nothing)
-    if issingleattribute(attr)
-        isnothing(attr) ? default_value : attr
-    elseif attr isa AbstractVector
-        attr
+function expand_edge_attributes(attr, graph::AbstractGraph)
+    if issingleattribute(attr.value)
+        isnothing(attr.value) ? attr.default_value : attr.value
+    elseif attr.value isa AbstractVector
+        attr.value
     else
-        [getattr(attr, i, default_value) for i in getedgekeys(graph, attr)]
+        [attr[i,e] for (i, e) in enumerate(edges(graph))]
+    end
+end
+
+function expand_edge_attributes(attr, edge_ids)
+    if issingleattribute(attr.value)
+        isnothing(attr.value) ? attr.default : attr.value
+    else
+        [attr[i, e] for (i, e) in edge_ids]
     end
 end
 
