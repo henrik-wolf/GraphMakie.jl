@@ -430,15 +430,15 @@ function Makie.plot!(gp::GraphPlot)
     end
 
     # prepare edge plot attributes (makes them vectors of length ne(g) or single elements)
-    map!(expand_edge_attributes, gp.attributes, [:edge_color_m, :graph], :edgeplot_color)
-    map!(expand_vertex_attributes, gp.attributes, [:edge_width_m, :graph], :edgeplot_linewidth)
-    map!(expand_vertex_attributes, gp.attributes, [:edge_linestyle_m, :graph], :edgeplot_linestyle)
+    map!(expand_edge_attributes, gp.attributes, [:edge_color_m, :graph], :edge_plot_color)
+    map!(expand_vertex_attributes, gp.attributes, [:edge_width_m, :graph], :edge_plot_linewidth)
+    map!(expand_vertex_attributes, gp.attributes, [:edge_linestyle_m, :graph], :edge_plot_linestyle)
 
     # actually plot edges
     edge_plot = edgeplot!(gp, gp[:edge_paths], gp[:start_end_shifts];
-        color=gp[:edgeplot_color],
-        linewidth=gp[:edgeplot_linewidth],
-        linestyle=gp[:edgeplot_linestyle],
+        color=gp[:edge_plot_color],
+        linewidth=gp[:edge_plot_linewidth],
+        linestyle=gp[:edge_plot_linestyle],
         # TODO: this drops reactivity for edge attributes
         gp.edge_attr[]...)
     add_constant!(gp.attributes, :edge_plot, edge_plot) #make plotobj accessible
@@ -499,16 +499,16 @@ function Makie.plot!(gp::GraphPlot)
     add_constant!(gp.attributes, :arrow_plot, arrow_plot) #make plotobj accessible
 
     # MARK: prepare node plot attributes
-    map!(expand_vertex_attributes, gp.attributes, [:node_color_m, :graph], :nodeplot_color)
-    map!(expand_vertex_attributes, gp.attributes, [:node_marker_m, :graph], :nodeplot_marker)
-    map!(expand_vertex_attributes, gp.attributes, [:node_strokewidth_m, :graph], :nodeplot_strokewidth)
-    map!(expand_vertex_attributes, gp.attributes, [:node_size_m, :graph], :nodeplot_markersize)
+    map!(expand_vertex_attributes, gp.attributes, [:node_color_expanded, :graph], :node_plot_color)
+    map!(expand_vertex_attributes, gp.attributes, [:node_marker_expanded, :graph], :node_plot_marker)
+    map!(expand_vertex_attributes, gp.attributes, [:node_strokewidth_expanded, :graph], :node_plot_strokewidth)
+    map!(expand_vertex_attributes, gp.attributes, [:node_size_expanded, :graph], :node_plot_markersize)
 
     vertex_plot = scatter!(gp, gp[:node_pos];
-        color=gp[:nodeplot_color],
-        marker=gp[:nodeplot_marker],
-        markersize=gp[:nodeplot_markersize],
-        strokewidth=gp[:nodeplot_strokewidth],
+        color=gp[:node_plot_color],
+        marker=gp[:node_plot_marker],
+        markersize=gp[:node_plot_markersize],
+        strokewidth=gp[:node_plot_strokewidth],
         # TODO: this drops reactivity for node attributes
         gp[:node_attr][]...)
     add_constant!(gp.attributes, :node_plot, vertex_plot) #make plotobj accessible
@@ -529,7 +529,7 @@ function Makie.plot!(gp::GraphPlot)
     map!(gp.attributes, [:node_pos, :nlabels_offset_m, :nlabel_node_ids], :nlabel_plot_positions) do node_pos, offset, nodes
         map(nodes) do id
             _off = offset[id]
-            if offset != nothing
+            if _off != nothing
                 node_pos[id] + _off
             else
                 node_pos[id]
