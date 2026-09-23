@@ -290,12 +290,13 @@ Add all the bezier controlpoints of graph plot or a single
 path to the axis `ax`.
 """
 function plot_controlpoints!(ax::Axis, gp::GraphPlot)
-    ep = get_edge_plot(gp)
-    paths = ep[:paths][]
+    paths = gp[:edge_paths][]
+    graph = gp[:graph][]
+    edge_color = gp[:edge_color_m]
 
-    for (i, p) in enumerate(paths)
-        p isa Line && continue
-        color = getattr(gp.edge_color, i)
+    for (i, edge) in enumerate(edges(g))
+        paths[i] isa Line && continue
+        color = edge_color[i, edge]
         plot_controlpoints!(ax, p; color)
     end
 end

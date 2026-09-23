@@ -836,7 +836,7 @@ function curved_path(p1::PT, p2::PT, curve_distance) where {PT}
     return BezierPath([MoveTo(p1), CurveTo(c1, c2, p2)])
 end
 
-@recipe EdgePlot (paths,start_end_offsets) begin
+@recipe EdgePlot (paths, start_end_offsets) begin
     Makie.documented_attributes(Lines)...
 end
 
