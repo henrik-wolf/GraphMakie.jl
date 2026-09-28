@@ -12,13 +12,7 @@ NetworkLayout.DEFAULT_RNG[] = StableRNG
 @testset "GraphMakie.jl" begin
 
     include("beziercurves_test.jl")
-    include("beziercurves_test.jl")
 
-    @testset "basic tests" begin
-        g = Observable(wheel_digraph(10))
-        f, ax, p = graphplot(g)
-        vis = Observable(false)
-        f, ax, p = graphplot(g, node_attr = (; visible = vis))
     @testset "basic tests" begin
         g = Observable(wheel_digraph(10))
         f, ax, p = graphplot(g)
